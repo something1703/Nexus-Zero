@@ -3,11 +3,11 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copy requirements and install
-COPY archestra-bridge/requirements.txt /app/requirements.txt
+COPY mcp-agents/archestra-bridge/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy bridge code
-COPY archestra-bridge/main.py /app/main.py
+COPY mcp-agents/archestra-bridge/main.py /app/main.py
 
 # Expose port
 EXPOSE 8080
