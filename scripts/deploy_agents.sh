@@ -106,23 +106,34 @@ deploy_agent() {
     local image="gcr.io/${PROJECT_ID}/${service_name}"
 
     info "Building Docker image: ${image}"
+    # Build from mcp-agents/ directory so Dockerfile can COPY common/ and {agent}/ dirs
+    # Create a cloudbuild.yaml that points to the right Dockerfile
+    local config_file=$(mktemp --suffix=.yaml)
+    cat > "$config_file" <<BUILDEOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', '${agent_name}-agent/Dockerfile', '-t', '$image', '.']
+images: ['$image']
+BUILDEOF
+    
     gcloud builds submit "$AGENTS_DIR" \
-        --tag "$image" \
-        --dockerfile "${agent_dir}/Dockerfile" \
+        --config="$config_file" \
         --quiet
+    
+    rm -f "$config_file"
 
     # All agents get the same infrastructure env vars.
     # User-specific credentials (Gemini, GitHub, Slack) are injected
     # at runtime via each agent's set_credentials MCP tool.
-    # Use env-vars-file to handle special characters in DB_PASSWORD
-    local env_file=$(mktemp)
-    cat > "$env_file" <<EOF
-GCP_PROJECT_ID=${PROJECT_ID}
-DB_NAME=${DB_NAME}
-DB_USER=${DB_USER}
-DB_PASSWORD=${DB_PASSWORD}
-INSTANCE_CONNECTION_NAME=${INSTANCE_CONNECTION_NAME}
-EOF
+    # Use YAML file to handle special characters in DB_PASSWORD
+    local env_file=$(mktemp --suffix=.yaml)
+    cat > "$env_file" <<'ENVEOF'
+GCP_PROJECT_ID: "'"${PROJECT_ID}"'"
+DB_NAME: "'"${DB_NAME}"'"
+DB_USER: "'"${DB_USER}"'"
+DB_PASSWORD: "'"${DB_PASSWORD}"'"
+INSTANCE_CONNECTION_NAME: "'"${INSTANCE_CONNECTION_NAME}"'"
+ENVEOF
 
     info "Deploying to Cloud Run: ${service_name}"
     gcloud run deploy "$service_name" \
