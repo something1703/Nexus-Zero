@@ -216,7 +216,7 @@ def get_pending_approvals(incident_id: str | None = None) -> str:
 
 
 @mcp.tool()
-def approve_action(audit_log_id: int, approved_by: str = "operator") -> str:
+def approve_action(audit_log_id: str, approved_by: str = "operator") -> str:
     """
     Approve a pending action and immediately execute it.
 
@@ -225,7 +225,7 @@ def approve_action(audit_log_id: int, approved_by: str = "operator") -> str:
     records the full result in the audit log.
 
     Args:
-        audit_log_id: The audit_logs.id of the action to approve.
+        audit_log_id: The audit_logs.id of the action to approve (UUID string).
         approved_by:  Who approved it (operator name or "auto").
 
     Returns:
