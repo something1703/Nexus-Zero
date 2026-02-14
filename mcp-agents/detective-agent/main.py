@@ -35,7 +35,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelna
 logger = logging.getLogger("detective-agent")
 
 mcp = FastMCP(
-    "Nexus-Zero Detective Agent"
+    "Nexus-Zero Detective Agent",
+    host=HOST,
+    port=PORT
 )
 
 

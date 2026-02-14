@@ -36,7 +36,9 @@ logger = logging.getLogger("sentinel-agent")
 
 # Initialize MCP Server
 mcp = FastMCP(
-    "Nexus-Zero Sentinel Agent"
+    "Nexus-Zero Sentinel Agent",
+    host=HOST,
+    port=PORT
 )
 
 

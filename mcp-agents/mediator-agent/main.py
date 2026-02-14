@@ -34,7 +34,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelna
 logger = logging.getLogger("mediator-agent")
 
 mcp = FastMCP(
-    "Nexus-Zero Mediator Agent"
+    "Nexus-Zero Mediator Agent",
+    host=HOST,
+    port=PORT
 )
 
 

@@ -33,7 +33,9 @@ from common.db_utils import (
 # MCP Server
 # ---------------------------------------------------------------------------
 mcp = FastMCP(
-    "Executor Agent"
+    "Executor Agent",
+    host=HOST,
+    port=PORT
 )
 
 # ---------------------------------------------------------------------------

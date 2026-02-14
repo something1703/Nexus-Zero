@@ -33,7 +33,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelna
 logger = logging.getLogger("historian-agent")
 
 mcp = FastMCP(
-    "Nexus-Zero Historian Agent"
+    "Nexus-Zero Historian Agent",
+    host=HOST,
+    port=PORT
 )
 
 
