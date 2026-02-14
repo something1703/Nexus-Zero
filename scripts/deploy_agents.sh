@@ -150,7 +150,7 @@ EOF
         --min-instances "$MIN_INSTANCES" \
         --max-instances "$MAX_INSTANCES" \
         --concurrency "$CONCURRENCY" \
-        --timeout "$TIMEOUT" \
+        --timeout 600 \
         --port 8080 \
         --quiet
     

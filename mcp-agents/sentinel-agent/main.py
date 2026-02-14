@@ -350,5 +350,15 @@ def set_credentials() -> str:
 
 
 if __name__ == "__main__":
-    logger.info(f"Starting Sentinel Agent on {HOST}:{PORT}")
-    mcp.run(transport="sse", host=HOST, port=PORT)
+    import sys
+    import traceback
+    
+    try:
+        logger.info(f"🚀 Starting Sentinel Agent on {HOST}:{PORT}")
+        logger.info(f"   GCP Project: {GCP_PROJECT_ID}")
+        logger.info(f"   Region: {GCP_REGION}")
+        mcp.run(transport="sse", host=HOST, port=PORT)
+    except Exception as e:
+        logger.error(f"❌ Agent startup failed: {e}")
+        logger.error(traceback.format_exc())
+        sys.exit(1)
