@@ -307,14 +307,11 @@ def approve_action(audit_log_id: int, approved_by: str = "operator") -> str:
             result=result,
         )
 
-        # Update incident status to mitigated
+        # Update incident status to resolved  
         update_incident(
             action["incident_id"],
-            status="mitigated",
-            resolution_notes=(
-                f"Action '{action_type}' on {service_name} executed successfully. "
-                f"Approved by {approved_by}."
-            ),
+            status="resolved",
+            resolution_action=action_type,
         )
 
         return json.dumps({
@@ -467,11 +464,8 @@ def execute_emergency_action(
         # Update incident
         update_incident(
             incident_id,
-            status="mitigated",
-            resolution_notes=(
-                f"EMERGENCY: {action_type} on {service_name} by {operator}. "
-                "Approval gate bypassed due to critical severity."
-            ),
+            status="resolved",
+            resolution_action=action_type,
         )
 
         return json.dumps({
