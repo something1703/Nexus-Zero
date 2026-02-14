@@ -43,13 +43,13 @@ def _get_connection_params():
 
 
 def get_pool():
-    """Get or create the connection pool."""
+    """Get or create the connection pool (lazy initialization)."""
     global _pool
     if _pool is None:
         try:
             conn_params = _get_connection_params()
             _pool = ThreadedConnectionPool(
-                minconn=1,
+                minconn=0,  # Lazy: don't create connections until needed
                 maxconn=5,
                 **conn_params
             )
@@ -64,16 +64,23 @@ def get_pool():
 def get_db_connection():
     """Context manager for database connections from the pool."""
     pool = get_pool()
-    conn = pool.getconn()
+    conn = None
     try:
+        conn = pool.getconn()
         conn.autocommit = False
         yield conn
         conn.commit()
-    except Exception:
-        conn.rollback()
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logger.error(f"Database error: {e}")
         raise
     finally:
-        pool.putconn(conn)
+        if conn:
+            pool.putconn(conn)
 
 
 @contextmanager
