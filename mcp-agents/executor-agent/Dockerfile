@@ -9,11 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy common utilities first (for Docker layer caching)
-COPY common/ /app/common/
+COPY ../common/ /app/common/
 
 # Copy agent code
-COPY executor-agent/requirements.txt /app/requirements.txt
-COPY executor-agent/main.py /app/main.py
+COPY requirements.txt /app/requirements.txt
+COPY main.py /app/main.py
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
