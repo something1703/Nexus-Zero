@@ -1,24 +1,19 @@
 """
 Archestra MCP Bridge
 ====================
-HTTP JSON-RPC bridge that connects Archestra to FastMCP SSE agents.
-Translates Archestra's HTTP requests to MCP SSE protocol.
+HTTP JSON-RPC server that proxies MCP requests to Nexus agent SSE endpoints.
+Archestra → HTTP → Bridge → SSE → Agents
 """
 
 import os
-import json
-import asyncio
 import logging
-from typing import Any, Dict, Optional
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from typing import Any, Dict
 import httpx
-from datetime import datetime
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("archestra-bridge")
-
-app = FastAPI(title="Nexus-Zero Archestra Bridge")
 
 # Agent SSE endpoints
 AGENTS = {
@@ -29,146 +24,118 @@ AGENTS = {
     "executor": "https://nexus-executor-agent-833613368271.us-central1.run.app",
 }
 
-# Session management for SSE connections
-sessions = {}
+# Cache for agent sessions
+agent_sessions = {}
+
+app = FastAPI(title="Nexus-Zero Archestra Bridge")
 
 
-class MCPClient:
-    """Manages MCP SSE connection to an agent"""
+async def get_agent_session(agent_name: str) -> Dict[str, str]:
+    """Get or create SSE session for an agent"""
+    if agent_name in agent_sessions:
+        return agent_sessions[agent_name]
     
-    def __init__(self, base_url: str):
-        self.base_url = base_url
-        self.session_id = None
-        self.message_url = None
-        
-    async def connect(self):
-        """Establish SSE connection and get session info"""
+    base_url = AGENTS[agent_name]
+    
+    try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(f"{self.base_url}/sse")
-            
-            # Parse SSE stream to get session endpoint
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    data = line[6:]  # Remove "data: " prefix
-                    if data.startswith("/messages/"):
-                        self.message_url = f"{self.base_url}{data}"
-                        self.session_id = data.split("session_id=")[1] if "session_id=" in data else None
-                        logger.info(f"Connected to {self.base_url}, session: {self.session_id}")
-                        break
-                        
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
-        """Call a tool on the MCP agent"""
-        if not self.message_url:
-            await self.connect()
-            
-        payload = {
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "params": {
-                "name": tool_name,
-                "arguments": arguments
-            },
-            "id": 1
-        }
-        
+            async with client.stream("GET", f"{base_url}/sse") as response:
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        data = line[6:]
+                        if data.startswith("/messages/"):
+                            message_url = f"{base_url}{data}"
+                            session_id = data.split("session_id=")[1] if "session_id=" in data else None
+                            
+                            agent_sessions[agent_name] = {
+                                "message_url": message_url,
+                                "session_id": session_id
+                            }
+                            logger.info(f"Connected to {agent_name}: {session_id}")
+                            return agent_sessions[agent_name]
+                            
+    except Exception as e:
+        logger.error(f"Failed to connect to {agent_name}: {e}")
+        raise
+
+
+async def call_agent_tool(agent_name: str, tool_name: str, arguments: Dict[str, Any]) -> Any:
+    """Call a tool on a specific agent via its SSE endpoint"""
+    session = await get_agent_session(agent_name)
+    
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments
+        },
+        "id": 1
+    }
+    
+    try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(self.message_url, json=payload)
+            response = await client.post(session["message_url"], json=payload)
             
             if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail=f"Agent error: {response.text}")
+                return {"error": f"Agent returned {response.status_code}: {response.text}"}
                 
             result = response.json()
-            return result.get("result", {})
             
-    async def list_tools(self) -> list:
-        """Get list of available tools from agent"""
-        if not self.message_url:
-            await self.connect()
-            
-        payload = {
-            "jsonrpc": "2.0",
-            "method": "tools/list",
-            "params": {},
-            "id": 1
-        }
-        
+            if "result" in result:
+                return result["result"]
+            elif "error" in result:
+                return {"error": result["error"]}
+            else:
+                return result
+                
+    except Exception as e:
+        logger.error(f"Error calling {tool_name} on {agent_name}: {e}")
+        return {"error": str(e)}
+
+
+async def list_agent_tools(agent_name: str) -> list:
+    """Get tools from a specific agent"""
+    session = await get_agent_session(agent_name)
+    
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "tools/list",
+        "params": {},
+        "id": 1
+    }
+    
+    try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(self.message_url, json=payload)
+            response = await client.post(session["message_url"], json=payload)
             
             if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail=f"Agent error: {response.text}")
+                logger.error(f"Failed to list tools for {agent_name}: {response.text}")
+                return []
                 
             result = response.json()
             return result.get("result", {}).get("tools", [])
+            
+    except Exception as e:
+        logger.error(f"Error listing tools for {agent_name}: {e}")
+        return []
 
 
 @app.get("/")
-async def root():
+async def health_check():
     """Health check"""
     return {
         "service": "Nexus-Zero Archestra Bridge",
         "status": "running",
-        "agents": list(AGENTS.keys()),
-        "timestamp": datetime.utcnow().isoformat()
+        "agents": list(AGENTS.keys())
     }
-
-
-@app.get("/agents")
-async def list_agents():
-    """List all available agents"""
-    return {
-        "agents": AGENTS,
-        "count": len(AGENTS)
-    }
-
-
-@app.get("/tools/{agent_name}")
-async def get_agent_tools(agent_name: str):
-    """Get tools available from a specific agent"""
-    if agent_name not in AGENTS:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_name} not found")
-        
-    try:
-        client = MCPClient(AGENTS[agent_name])
-        tools = await client.list_tools()
-        return {
-            "agent": agent_name,
-            "tools": tools
-        }
-    except Exception as e:
-        logger.error(f"Error listing tools for {agent_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/call/{agent_name}/{tool_name}")
-async def call_tool(agent_name: str, tool_name: str, request: Request):
-    """Call a specific tool on an agent"""
-    if agent_name not in AGENTS:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_name} not found")
-        
-    try:
-        body = await request.json()
-        arguments = body.get("arguments", {})
-        
-        client = MCPClient(AGENTS[agent_name])
-        result = await client.call_tool(tool_name, arguments)
-        
-        return {
-            "agent": agent_name,
-            "tool": tool_name,
-            "result": result,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Error calling {tool_name} on {agent_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/mcp")
-async def mcp_endpoint(request: Request):
+async def mcp_http_endpoint(request: Request):
     """
-    MCP-compatible endpoint for Archestra.
-    Accepts JSON-RPC 2.0 requests and routes to appropriate agents.
+    HTTP MCP endpoint that Archestra can POST to.
+    Implements full MCP JSON-RPC 2.0 protocol.
     """
     try:
         body = await request.json()
@@ -176,7 +143,9 @@ async def mcp_endpoint(request: Request):
         params = body.get("params", {})
         request_id = body.get("id", 1)
         
-        # Handle initialization
+        logger.info(f"MCP request: method={method}, id={request_id}")
+        
+        # Handle initialize
         if method == "initialize":
             return JSONResponse({
                 "jsonrpc": "2.0",
@@ -193,13 +162,17 @@ async def mcp_endpoint(request: Request):
                 }
             })
         
-        # Handle tools/list - aggregate all agent tools
+        # Handle initialized notification
+        elif method == "notifications/initialized":
+            # This is a notification, no response needed
+            return JSONResponse({"jsonrpc": "2.0"}, status_code=200)
+        
+        # Handle tools/list
         elif method == "tools/list":
             all_tools = []
             for agent_name, base_url in AGENTS.items():
                 try:
-                    client = MCPClient(base_url)
-                    tools = await client.list_tools()
+                    tools = await list_agent_tools(agent_name)
                     # Prefix tool names with agent name
                     for tool in tools:
                         tool["name"] = f"{agent_name}_{tool['name']}"
@@ -222,15 +195,28 @@ async def mcp_endpoint(request: Request):
             
             # Parse agent name from tool name (format: agent_toolname)
             if "_" not in tool_name:
-                raise HTTPException(status_code=400, detail="Tool name must be in format: agent_toolname")
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32602,
+                        "message": "Tool name must be in format: agent_toolname"
+                    }
+                })
                 
             agent_name, actual_tool = tool_name.split("_", 1)
             
             if agent_name not in AGENTS:
-                raise HTTPException(status_code=404, detail=f"Agent {agent_name} not found")
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32602,
+                        "message": f"Agent {agent_name} not found"
+                    }
+                })
                 
-            client = MCPClient(AGENTS[agent_name])
-            result = await client.call_tool(actual_tool, arguments)
+            result = await call_agent_tool(agent_name, actual_tool, arguments)
             
             return JSONResponse({
                 "jsonrpc": "2.0",
@@ -239,13 +225,21 @@ async def mcp_endpoint(request: Request):
             })
         
         else:
-            raise HTTPException(status_code=400, detail=f"Unknown method: {method}")
+            logger.warning(f"Unknown method: {method}")
+            return JSONResponse({
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
+                    "code": -32601,
+                    "message": f"Method not found: {method}"
+                }
+            })
             
     except Exception as e:
-        logger.error(f"MCP endpoint error: {e}")
+        logger.error(f"MCP endpoint error: {e}", exc_info=True)
         return JSONResponse({
             "jsonrpc": "2.0",
-            "id": request_id,
+            "id": body.get("id", 1) if 'body' in locals() else 1,
             "error": {
                 "code": -32603,
                 "message": str(e)
@@ -255,5 +249,11 @@ async def mcp_endpoint(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    PORT = int(os.environ.get("PORT", 8080))
+    HOST = os.environ.get("HOST", "0.0.0.0")
+    
+    logger.info(f"Starting Archestra Bridge on {HOST}:{PORT}")
+    logger.info(f"Proxying to {len(AGENTS)} agents: {list(AGENTS.keys())}")
+    logger.info("HTTP MCP endpoint: /mcp")
+    
+    uvicorn.run(app, host=HOST, port=PORT)
