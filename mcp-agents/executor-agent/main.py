@@ -15,10 +15,8 @@ import sys
 import json
 import datetime
 
-# Add parent directory so we can import common/
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "common")):
-    sys.path.insert(0, os.path.dirname(__file__))
+# In Docker: main.py at /app/main.py, common at /app/common/
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mcp.server.fastmcp import FastMCP
 from common.config import PORT, HOST

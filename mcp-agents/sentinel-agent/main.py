@@ -16,8 +16,9 @@ import json
 import logging
 from datetime import datetime, timezone, timedelta
 
-# Add parent directory to path for common imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add directory containing main.py to path so 'common' package is found
+# In Docker: main.py is at /app/main.py, common is at /app/common/
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mcp.server.fastmcp import FastMCP
 from google.cloud import logging as gcp_logging

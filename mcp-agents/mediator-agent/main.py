@@ -16,7 +16,8 @@ import json
 import logging
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# In Docker: main.py at /app/main.py, common at /app/common/
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mcp.server.fastmcp import FastMCP
 import google.generativeai as genai
