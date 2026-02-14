@@ -24,11 +24,10 @@ DB_NAME="${DB_NAME:-nexus_zero}"
 DB_USER="${DB_USER:-nexus_admin}"
 DB_PASSWORD="${DB_PASSWORD:-}"                        # REQUIRED
 INSTANCE_CONNECTION_NAME="${INSTANCE_CONNECTION_NAME:-${PROJECT_ID}:${REGION}:nexus-zero-db}"
-GEMINI_API_KEY="${GEMINI_API_KEY:-}"                   # needed by detective & mediator
-GITHUB_TOKEN="${GITHUB_TOKEN:-}"                       # needed by detective
-GITHUB_REPO="${GITHUB_REPO:-}"                         # needed by detective
-SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-}"                 # optional
-SLACK_CHANNEL="${SLACK_CHANNEL:-}"                      # optional
+
+# NOTE: GEMINI_API_KEY, GITHUB_TOKEN, GITHUB_REPO, SLACK_BOT_TOKEN
+# are NOT baked into env vars. They are injected at runtime via each
+# agent's set_credentials MCP tool — zero trust, multi-tenant design.
 
 # Cloud Run settings
 MEMORY="512Mi"
@@ -112,30 +111,14 @@ deploy_agent() {
         --dockerfile "${agent_dir}/Dockerfile" \
         --quiet
 
-    # Common env vars for all agents
+    # All agents get the same infrastructure env vars.
+    # User-specific credentials (Gemini, GitHub, Slack) are injected
+    # at runtime via each agent's set_credentials MCP tool.
     local env_vars="GCP_PROJECT_ID=${PROJECT_ID}"
     env_vars+=",DB_NAME=${DB_NAME}"
     env_vars+=",DB_USER=${DB_USER}"
     env_vars+=",DB_PASSWORD=${DB_PASSWORD}"
     env_vars+=",INSTANCE_CONNECTION_NAME=${INSTANCE_CONNECTION_NAME}"
-
-    # Agent-specific env vars
-    case "$agent_name" in
-        detective)
-            env_vars+=",GEMINI_API_KEY=${GEMINI_API_KEY}"
-            env_vars+=",GITHUB_TOKEN=${GITHUB_TOKEN}"
-            env_vars+=",GITHUB_REPO=${GITHUB_REPO}"
-            ;;
-        mediator)
-            env_vars+=",GEMINI_API_KEY=${GEMINI_API_KEY}"
-            ;;
-        executor)
-            if [[ -n "$SLACK_BOT_TOKEN" ]]; then
-                env_vars+=",SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}"
-                env_vars+=",SLACK_CHANNEL=${SLACK_CHANNEL}"
-            fi
-            ;;
-    esac
 
     info "Deploying to Cloud Run: ${service_name}"
     gcloud run deploy "$service_name" \

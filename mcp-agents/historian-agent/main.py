@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mcp.server.fastmcp import FastMCP
 
 from common.config import PORT, HOST
+from common.credential_store import get_all_credentials
 from common.db_utils import (
     get_incident, search_playbooks_by_pattern,
     find_similar_past_incidents, get_playbook_with_solutions,
@@ -322,6 +323,25 @@ def get_recommended_solutions(incident_id: str) -> str:
         logger.error(error_msg)
         update_audit_log(audit["id"], status="failed", error_message=error_msg)
         return json.dumps({"status": "error", "message": error_msg})
+
+
+@mcp.tool()
+def set_credentials() -> str:
+    """
+    Check credential status for this agent.
+
+    The Historian Agent queries only the Nexus-Zero database and does not
+    require external API keys. This tool is provided for consistency.
+
+    Returns:
+        JSON status of current credentials
+    """
+    return json.dumps({
+        "status": "ready",
+        "agent": "historian",
+        "message": "Historian uses database credentials only. No additional keys needed.",
+        "stored_keys": list(get_all_credentials().keys()),
+    })
 
 
 if __name__ == "__main__":

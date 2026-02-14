@@ -21,9 +21,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mcp.server.fastmcp import FastMCP
 import google.generativeai as genai
 
-from common.config import (
-    GEMINI_API_KEY, GEMINI_MODEL, PORT, HOST
-)
+from common.config import GEMINI_MODEL, PORT, HOST
+from common.credential_store import get_credential, set_credential, get_all_credentials
 from common.db_utils import (
     get_incident, get_service, get_service_dependencies,
     calculate_blast_radius, get_all_services,
@@ -38,8 +37,14 @@ mcp = FastMCP(
     description="Performs risk assessment and blast radius analysis to ensure safe remediation."
 )
 
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+
+def _get_gemini_model():
+    """Get Gemini model, configuring API key from runtime store."""
+    api_key = get_credential("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY not set. Call set_credentials first.")
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel(GEMINI_MODEL)
 
 # Safety policies
 GUARDRAILS = {
@@ -373,8 +378,9 @@ def produce_recommendation(
 
         # AI-powered reasoning
         ai_reasoning = "Gemini not configured for deep reasoning"
-        if GEMINI_API_KEY:
-            model = genai.GenerativeModel(GEMINI_MODEL)
+        gemini_key = get_credential("GEMINI_API_KEY")
+        if gemini_key:
+            model = _get_gemini_model()
             prompt = f"""You are an SRE risk analyst. Evaluate this proposed remediation:
 
 INCIDENT:
@@ -452,6 +458,37 @@ Provide a brief (3-4 sentences) risk assessment and your recommendation (proceed
         logger.error(error_msg)
         update_audit_log(audit["id"], status="failed", error_message=error_msg)
         return json.dumps({"status": "error", "message": error_msg})
+
+
+@mcp.tool()
+def set_credentials(
+    gemini_api_key: str = "",
+) -> str:
+    """
+    Inject runtime credentials for this agent.
+
+    Call this BEFORE using produce_recommendation with AI reasoning.
+    Credentials are stored in memory only — they vanish when the container
+    scales to zero.
+
+    Args:
+        gemini_api_key: Google Gemini API key for AI-powered risk reasoning
+
+    Returns:
+        JSON confirmation of which credentials were set
+    """
+    set_creds = []
+    if gemini_api_key:
+        set_credential("GEMINI_API_KEY", gemini_api_key)
+        set_creds.append("GEMINI_API_KEY")
+
+    logger.info(f"Credentials set: {set_creds}")
+    return json.dumps({
+        "status": "credentials_updated",
+        "keys_set": set_creds,
+        "stored_keys": list(get_all_credentials().keys()),
+        "message": "Credentials stored in memory. They will be cleared when the container scales to zero."
+    })
 
 
 if __name__ == "__main__":

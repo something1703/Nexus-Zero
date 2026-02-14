@@ -23,10 +23,8 @@ from google.cloud import logging as gcp_logging
 from github import Github, GithubException
 import google.generativeai as genai
 
-from common.config import (
-    GCP_PROJECT_ID, GITHUB_TOKEN, GITHUB_REPO,
-    GEMINI_API_KEY, GEMINI_MODEL, PORT, HOST
-)
+from common.config import GCP_PROJECT_ID, GEMINI_MODEL, PORT, HOST
+from common.credential_store import get_credential, set_credential, get_all_credentials
 from common.db_utils import (
     get_incident, update_incident, create_audit_log,
     update_audit_log, get_recent_deployments
@@ -40,16 +38,22 @@ mcp = FastMCP(
     description="Performs root cause analysis by correlating error logs with code changes."
 )
 
-# Initialize Gemini
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+
+def _get_gemini_model():
+    """Get Gemini model, configuring API key from runtime store."""
+    api_key = get_credential("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY not set. Call set_credentials first.")
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel(GEMINI_MODEL)
 
 
 def _get_github_client():
-    """Create GitHub client."""
-    if not GITHUB_TOKEN:
-        raise ValueError("GITHUB_TOKEN environment variable is required")
-    return Github(GITHUB_TOKEN)
+    """Create GitHub client using runtime credentials."""
+    token = get_credential("GITHUB_TOKEN")
+    if not token:
+        raise ValueError("GITHUB_TOKEN not set. Call set_credentials first.")
+    return Github(token)
 
 
 def _query_gcp_logs(service_name, time_window_minutes=30, severity="ERROR"):
@@ -87,8 +91,12 @@ def _query_gcp_logs(service_name, time_window_minutes=30, severity="ERROR"):
     return parsed
 
 
-def _get_recent_commits(repo_name, since_minutes=30):
+def _get_recent_commits(repo_name=None, since_minutes=30):
     """Get recent commits from a GitHub repository."""
+    if not repo_name:
+        repo_name = get_credential("GITHUB_REPO")
+    if not repo_name:
+        raise ValueError("GITHUB_REPO not set. Call set_credentials first.")
     gh = _get_github_client()
     repo = gh.get_repo(repo_name)
 
@@ -222,13 +230,14 @@ def correlate_with_commits(
         if not incident:
             return json.dumps({"status": "error", "message": f"Incident {incident_id} not found"})
 
-        if not GITHUB_REPO:
+        github_repo = get_credential("GITHUB_REPO")
+        if not github_repo:
             return json.dumps({
                 "status": "error",
-                "message": "GITHUB_REPO environment variable is not configured"
+                "message": "GITHUB_REPO not configured. Call set_credentials first."
             })
 
-        commits = _get_recent_commits(GITHUB_REPO, time_window_minutes)
+        commits = _get_recent_commits(github_repo, time_window_minutes)
 
         if not commits:
             result = {
@@ -350,9 +359,10 @@ def investigate_root_cause(
 
         # Step 2: Gather evidence from commits
         commits = []
-        if GITHUB_REPO:
+        github_repo = get_credential("GITHUB_REPO")
+        if github_repo:
             try:
-                commits = _get_recent_commits(GITHUB_REPO, time_window_minutes * 2)
+                commits = _get_recent_commits(github_repo, time_window_minutes * 2)
             except Exception as e:
                 logger.warning(f"GitHub query failed: {e}")
 
@@ -373,8 +383,9 @@ def investigate_root_cause(
         suspect_commit = None
         suspect_file = None
 
-        if GEMINI_API_KEY:
-            model = genai.GenerativeModel(GEMINI_MODEL)
+        gemini_key = get_credential("GEMINI_API_KEY")
+        if gemini_key:
+            model = _get_gemini_model()
             prompt = f"""You are an expert SRE investigating a production incident.
 
 INCIDENT DETAILS:
@@ -439,7 +450,7 @@ Only respond with valid JSON, nothing else."""
                 "log_sample": log_summary[:3],
                 "commit_sample": commit_summary[:3]
             },
-            "recommended_action": analysis.get("recommended_action", "Further investigation needed") if GEMINI_API_KEY else "Configure Gemini for AI-powered analysis"
+            "recommended_action": analysis.get("recommended_action", "Further investigation needed") if gemini_key else "Configure Gemini for AI-powered analysis"
         }
 
         update_audit_log(audit["id"], status="success", result=result)
@@ -451,6 +462,47 @@ Only respond with valid JSON, nothing else."""
         logger.error(error_msg)
         update_audit_log(audit["id"], status="failed", error_message=error_msg)
         return json.dumps({"status": "error", "message": error_msg})
+
+
+@mcp.tool()
+def set_credentials(
+    gemini_api_key: str = "",
+    github_token: str = "",
+    github_repo: str = "",
+) -> str:
+    """
+    Inject runtime credentials for this agent.
+
+    Call this BEFORE using investigate_root_cause or correlate_with_commits.
+    Credentials are stored in memory only — they vanish when the container
+    scales to zero.
+
+    Args:
+        gemini_api_key: Google Gemini API key for AI reasoning
+        github_token:   GitHub personal access token for commit correlation
+        github_repo:    GitHub repo in 'owner/repo' format (e.g. 'acme/my-app')
+
+    Returns:
+        JSON confirmation of which credentials were set
+    """
+    set_creds = []
+    if gemini_api_key:
+        set_credential("GEMINI_API_KEY", gemini_api_key)
+        set_creds.append("GEMINI_API_KEY")
+    if github_token:
+        set_credential("GITHUB_TOKEN", github_token)
+        set_creds.append("GITHUB_TOKEN")
+    if github_repo:
+        set_credential("GITHUB_REPO", github_repo)
+        set_creds.append("GITHUB_REPO")
+
+    logger.info(f"Credentials set: {set_creds}")
+    return json.dumps({
+        "status": "credentials_updated",
+        "keys_set": set_creds,
+        "stored_keys": list(get_all_credentials().keys()),
+        "message": "Credentials stored in memory. They will be cleared when the container scales to zero."
+    })
 
 
 if __name__ == "__main__":

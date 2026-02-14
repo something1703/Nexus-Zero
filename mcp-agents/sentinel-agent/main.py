@@ -23,6 +23,7 @@ from mcp.server.fastmcp import FastMCP
 from google.cloud import logging as gcp_logging
 
 from common.config import GCP_PROJECT_ID, GCP_REGION, PORT, HOST
+from common.credential_store import get_credential, set_credential, get_all_credentials
 from common.db_utils import (
     create_incident, update_incident, get_open_incidents,
     get_all_services, create_audit_log, update_audit_log
@@ -324,6 +325,28 @@ def acknowledge_incident(incident_id: str) -> str:
         error_msg = f"Failed to acknowledge incident: {str(e)}"
         logger.error(error_msg)
         return json.dumps({"status": "error", "message": error_msg})
+
+
+@mcp.tool()
+def set_credentials() -> str:
+    """
+    Check credential status for this agent.
+
+    The Sentinel Agent uses GCP service account credentials (automatic on
+    Cloud Run) and does not require external API keys. This tool is provided
+    for consistency across all agents.
+
+    Returns:
+        JSON status of current credentials
+    """
+    return json.dumps({
+        "status": "ready",
+        "agent": "sentinel",
+        "gcp_project": GCP_PROJECT_ID,
+        "gcp_region": GCP_REGION,
+        "message": "Sentinel uses GCP service account credentials. No additional keys needed.",
+        "stored_keys": list(get_all_credentials().keys()),
+    })
 
 
 if __name__ == "__main__":

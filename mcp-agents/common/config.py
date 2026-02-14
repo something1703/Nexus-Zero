@@ -17,17 +17,8 @@ INSTANCE_CONNECTION_NAME = os.environ.get(
 )
 CLOUD_SQL_SOCKET_DIR = os.environ.get("CLOUD_SQL_SOCKET_DIR", "/cloudsql")
 
-# GitHub Configuration
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-GITHUB_REPO = os.environ.get("GITHUB_REPO", "")
-
-# Gemini Configuration
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# Gemini model name (NOT the API key — key is in credential_store)
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-
-# Slack Configuration
-SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
-SLACK_CHANNEL = os.environ.get("SLACK_CHANNEL", "#nexus-zero-alerts")
 
 # Server Configuration
 PORT = int(os.environ.get("PORT", 8080))

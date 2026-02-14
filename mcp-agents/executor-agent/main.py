@@ -21,7 +21,8 @@ if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "common")):
     sys.path.insert(0, os.path.dirname(__file__))
 
 from mcp.server.fastmcp import FastMCP
-from common.config import config
+from common.config import PORT, HOST
+from common.credential_store import get_credential, set_credential, get_all_credentials
 from common.db_utils import (
     get_db_cursor,
     update_incident,
@@ -35,8 +36,6 @@ from common.db_utils import (
 # ---------------------------------------------------------------------------
 mcp = FastMCP(
     "Executor Agent",
-    host=config.HOST,
-    port=config.PORT,
     description=(
         "Gated remediation engine for Nexus-Zero. Executes rollbacks, "
         "scaling, and config changes — only after explicit approval. "
@@ -301,7 +300,8 @@ def approve_action(audit_log_id: int, approved_by: str = "operator") -> str:
             record_config_change(
                 service_name=service_name,
                 change_type="env_var",
-                change_details=details,
+                old_value=details.get("old_value", {}),
+                new_value=details.get("new_value", {}),
                 changed_by=f"executor-agent (approved by {approved_by})",
             )
 
@@ -551,9 +551,43 @@ def get_execution_history(
         return json.dumps({"error": str(e)})
 
 
+@mcp.tool()
+def set_credentials(
+    slack_bot_token: str = "",
+    slack_channel: str = "",
+) -> str:
+    """
+    Inject runtime credentials for this agent.
+
+    Credentials are stored in memory only — they vanish when the container
+    scales to zero.
+
+    Args:
+        slack_bot_token: Slack Bot token for posting remediation updates
+        slack_channel:   Slack channel to post to (e.g. '#incidents')
+
+    Returns:
+        JSON confirmation of which credentials were set
+    """
+    set_creds = []
+    if slack_bot_token:
+        set_credential("SLACK_BOT_TOKEN", slack_bot_token)
+        set_creds.append("SLACK_BOT_TOKEN")
+    if slack_channel:
+        set_credential("SLACK_CHANNEL", slack_channel)
+        set_creds.append("SLACK_CHANNEL")
+
+    return json.dumps({
+        "status": "credentials_updated",
+        "keys_set": set_creds,
+        "stored_keys": list(get_all_credentials().keys()),
+        "message": "Credentials stored in memory. They will be cleared when the container scales to zero."
+    })
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    print(f"🚀 Executor Agent starting on {config.HOST}:{config.PORT}")
-    mcp.run(transport="sse")
+    print(f"🚀 Executor Agent starting on {HOST}:{PORT}")
+    mcp.run(transport="sse", host=HOST, port=PORT)
