@@ -358,8 +358,20 @@ if __name__ == "__main__":
         logger.info(f"🚀 Starting Sentinel Agent on {HOST}:{PORT}")
         logger.info(f"   GCP Project: {GCP_PROJECT_ID}")
         logger.info(f"   Region: {GCP_REGION}")
-        mcp.run(transport="sse", host=HOST, port=PORT)
+        logger.info(f"   Python path: {sys.path[:3]}")
+        logger.info("   Initializing FastMCP server...")
+        
+        # Start the server with explicit parameters
+        mcp.run(
+            transport="sse",
+            host=HOST,
+            port=PORT
+        )
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+        sys.exit(0)
     except Exception as e:
         logger.error(f"❌ Agent startup failed: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(f"   Exception type: {type(e).__name__}")
+        logger.error(f"   Traceback:\n{traceback.format_exc()}")
         sys.exit(1)
