@@ -48,7 +48,7 @@ ALLOWED_ACTION_TYPES = {"rollback", "scale", "restart", "config_change", "custom
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_pending_actions(incident_id: int | None = None) -> list[dict]:
+def _get_pending_actions(incident_id: str | None = None) -> list[dict]:
     """Fetch audit-log entries that are pending approval."""
     with get_db_cursor() as cur:
         if incident_id:
@@ -160,12 +160,12 @@ ACTION_EXECUTORS = {
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def get_pending_approvals(incident_id: int | None = None) -> str:
+def get_pending_approvals(incident_id: str | None = None) -> str:
     """
     List all actions waiting for human approval.
 
     Args:
-        incident_id: Optionally filter by a specific incident.
+        incident_id: Optionally filter by a specific incident (UUID string).
 
     Returns:
         JSON array of pending actions with audit-log IDs, action types,
@@ -382,7 +382,7 @@ def reject_action(audit_log_id: int, reason: str = "Rejected by operator") -> st
 
 @mcp.tool()
 def execute_emergency_action(
-    incident_id: int,
+    incident_id: str,
     action_type: str,
     service_name: str,
     action_details: str,
@@ -487,14 +487,14 @@ def execute_emergency_action(
 
 @mcp.tool()
 def get_execution_history(
-    incident_id: int | None = None,
+    incident_id: str | None = None,
     limit: int = 20,
 ) -> str:
     """
     Retrieve the audit trail of all executed, rejected, and failed actions.
 
     Args:
-        incident_id: Optionally filter by incident.
+        incident_id: Optionally filter by incident (UUID string).
         limit:       Max rows to return (default 20).
 
     Returns:
