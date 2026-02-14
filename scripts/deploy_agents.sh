@@ -125,6 +125,15 @@ BUILDEOF
     # All agents get the same infrastructure env vars.
     # User-specific credentials (Gemini, GitHub, Slack) are injected
     # at runtime via each agent's set_credentials MCP tool.
+    # Create proper YAML file with quoted values to handle special characters
+    local env_file=$(mktemp --suffix=.yaml)
+    cat > "$env_file" <<EOF
+GCP_PROJECT_ID: "${PROJECT_ID}"
+DB_NAME: "${DB_NAME}"
+DB_USER: "${DB_USER}"
+DB_PASSWORD: "${DB_PASSWORD}"
+INSTANCE_CONNECTION_NAME: "${INSTANCE_CONNECTION_NAME}"
+EOF
 
     info "Deploying to Cloud Run: ${service_name}"
     gcloud run deploy "$service_name" \
@@ -133,7 +142,7 @@ BUILDEOF
         --platform managed \
         --allow-unauthenticated \
         --add-cloudsql-instances "$INSTANCE_CONNECTION_NAME" \
-        --update-env-vars "GCP_PROJECT_ID=${PROJECT_ID},DB_NAME=${DB_NAME},DB_USER=${DB_USER},DB_PASSWORD=${DB_PASSWORD},INSTANCE_CONNECTION_NAME=${INSTANCE_CONNECTION_NAME}" \
+        --env-vars-file "$env_file" \
         --memory "$MEMORY" \
         --cpu "$CPU" \
         --min-instances "$MIN_INSTANCES" \
@@ -142,6 +151,8 @@ BUILDEOF
         --timeout "$TIMEOUT" \
         --port 8080 \
         --quiet
+    
+    rm -f "$env_file"
 
     # Get the deployed URL
     local url
