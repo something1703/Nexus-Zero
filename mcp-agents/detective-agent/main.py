@@ -76,8 +76,7 @@ def _query_gcp_logs(service_name, time_window_minutes=30, severity="ERROR"):
     entries = list(client.list_entries(
         filter_=log_filter,
         order_by=gcp_logging.DESCENDING,
-        max_results=100,
-        project_ids=[GCP_PROJECT_ID]
+        max_results=100
     ))
 
     parsed = []

@@ -123,8 +123,7 @@ def detect_anomalies(
         entries = list(client.list_entries(
             filter_=log_filter,
             order_by=gcp_logging.DESCENDING,
-            max_results=500,
-            project_ids=[GCP_PROJECT_ID]
+            max_results=500
         ))
 
         if not entries:
