@@ -114,11 +114,15 @@ deploy_agent() {
     # All agents get the same infrastructure env vars.
     # User-specific credentials (Gemini, GitHub, Slack) are injected
     # at runtime via each agent's set_credentials MCP tool.
-    local env_vars="GCP_PROJECT_ID=${PROJECT_ID}"
-    env_vars+=",DB_NAME=${DB_NAME}"
-    env_vars+=",DB_USER=${DB_USER}"
-    env_vars+=",DB_PASSWORD=${DB_PASSWORD}"
-    env_vars+=",INSTANCE_CONNECTION_NAME=${INSTANCE_CONNECTION_NAME}"
+    # Use env-vars-file to handle special characters in DB_PASSWORD
+    local env_file=$(mktemp)
+    cat > "$env_file" <<EOF
+GCP_PROJECT_ID=${PROJECT_ID}
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+DB_PASSWORD=${DB_PASSWORD}
+INSTANCE_CONNECTION_NAME=${INSTANCE_CONNECTION_NAME}
+EOF
 
     info "Deploying to Cloud Run: ${service_name}"
     gcloud run deploy "$service_name" \
@@ -127,7 +131,7 @@ deploy_agent() {
         --platform managed \
         --allow-unauthenticated \
         --add-cloudsql-instances "$INSTANCE_CONNECTION_NAME" \
-        --set-env-vars "$env_vars" \
+        --env-vars-file "$env_file" \
         --memory "$MEMORY" \
         --cpu "$CPU" \
         --min-instances "$MIN_INSTANCES" \
@@ -136,6 +140,8 @@ deploy_agent() {
         --timeout "$TIMEOUT" \
         --port 8080 \
         --quiet
+    
+    rm -f "$env_file"
 
     # Get the deployed URL
     local url
