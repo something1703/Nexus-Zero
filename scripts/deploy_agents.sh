@@ -22,7 +22,7 @@ PROJECT_ID="${GCP_PROJECT_ID:-nexus-zero-sre}"
 REGION="${GCP_REGION:-us-central1}"
 DB_NAME="${DB_NAME:-nexus_zero}"
 DB_USER="${DB_USER:-nexus_admin}"
-DB_PASSWORD="${DB_PASSWORD:-}"                        # REQUIRED
+DB_PASSWORD_SECRET="${DB_PASSWORD_SECRET:-db-password}"  # Secret Manager secret name
 INSTANCE_CONNECTION_NAME="${INSTANCE_CONNECTION_NAME:-${PROJECT_ID}:${REGION}:nexus-zero-db}"
 
 # NOTE: GEMINI_API_KEY, GITHUB_TOKEN, GITHUB_REPO, SLACK_BOT_TOKEN
@@ -52,16 +52,25 @@ ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 err()   { echo -e "${RED}[ERROR]${NC} $*"; }
 
-# ---- Validation -------------------------------------------------------------
-if [[ -z "$DB_PASSWORD" ]]; then
-    err "DB_PASSWORD is not set. Export it before running this script."
-    echo "  export DB_PASSWORD='your-password'"
-    exit 1
-fi
-
+# ---- Validation & Password Retrieval ----------------------------------------
 # Make sure gcloud is configured
 info "Active GCP project: $(gcloud config get-value project 2>/dev/null)"
 gcloud config set project "$PROJECT_ID" --quiet
+
+# Fetch DB password from Secret Manager (secure, no hardcoding)
+info "Fetching database password from Secret Manager..."
+DB_PASSWORD=$(gcloud secrets versions access latest \
+    --secret="$DB_PASSWORD_SECRET" \
+    --project="$PROJECT_ID" 2>/dev/null)
+
+if [[ -z "$DB_PASSWORD" ]]; then
+    err "Failed to retrieve password from Secret Manager."
+    echo "  Make sure the secret exists: gcloud secrets describe $DB_PASSWORD_SECRET"
+    echo "  Or create it: echo -n 'YOUR_PASSWORD' | gcloud secrets create $DB_PASSWORD_SECRET --data-file=-"
+    exit 1
+fi
+
+info "✅ Password retrieved from Secret Manager (secret: $DB_PASSWORD_SECRET)"
 
 # Enable required APIs (idempotent)
 info "Enabling required GCP APIs..."
