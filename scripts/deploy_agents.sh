@@ -125,15 +125,15 @@ BUILDEOF
     # All agents get the same infrastructure env vars.
     # User-specific credentials (Gemini, GitHub, Slack) are injected
     # at runtime via each agent's set_credentials MCP tool.
-    # Use YAML file to handle special characters in DB_PASSWORD
-    local env_file=$(mktemp --suffix=.yaml)
-    cat > "$env_file" <<'ENVEOF'
-GCP_PROJECT_ID: "'"${PROJECT_ID}"'"
-DB_NAME: "'"${DB_NAME}"'"
-DB_USER: "'"${DB_USER}"'"
-DB_PASSWORD: "'"${DB_PASSWORD}"'"
-INSTANCE_CONNECTION_NAME: "'"${INSTANCE_CONNECTION_NAME}"'"
-ENVEOF
+    # Use simple KEY=VALUE format (not YAML) to handle special characters
+    local env_file=$(mktemp --suffix=.txt)
+    cat > "$env_file" <<EOF
+GCP_PROJECT_ID=${PROJECT_ID}
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+DB_PASSWORD=${DB_PASSWORD}
+INSTANCE_CONNECTION_NAME=${INSTANCE_CONNECTION_NAME}
+EOF
 
     info "Deploying to Cloud Run: ${service_name}"
     gcloud run deploy "$service_name" \
