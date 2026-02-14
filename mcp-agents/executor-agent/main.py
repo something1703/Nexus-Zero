@@ -583,4 +583,4 @@ def set_credentials(
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     print(f"🚀 Executor Agent starting on {HOST}:{PORT}")
-    mcp.run(transport="sse", host=HOST, port=PORT)
+    mcp.run(transport="sse")

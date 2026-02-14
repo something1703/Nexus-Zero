@@ -361,11 +361,7 @@ if __name__ == "__main__":
         logger.info("   Initializing FastMCP server...")
         
         # Start the server with explicit parameters
-        mcp.run(
-            transport="sse",
-            host=HOST,
-            port=PORT
-        )
+        mcp.run(transport="sse")
     except KeyboardInterrupt:
         logger.info("Shutting down...")
         sys.exit(0)

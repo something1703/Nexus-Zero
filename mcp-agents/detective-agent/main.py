@@ -507,4 +507,4 @@ def set_credentials(
 
 if __name__ == "__main__":
     logger.info(f"Starting Detective Agent on {HOST}:{PORT}")
-    mcp.run(transport="sse", host=HOST, port=PORT)
+    mcp.run(transport="sse")

@@ -346,4 +346,4 @@ def set_credentials() -> str:
 
 if __name__ == "__main__":
     logger.info(f"Starting Historian Agent on {HOST}:{PORT}")
-    mcp.run(transport="sse", host=HOST, port=PORT)
+    mcp.run(transport="sse")
