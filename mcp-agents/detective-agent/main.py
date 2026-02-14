@@ -35,8 +35,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelna
 logger = logging.getLogger("detective-agent")
 
 mcp = FastMCP(
-    "Nexus-Zero Detective Agent",
-    description="Performs root cause analysis by correlating error logs with code changes."
+    "Nexus-Zero Detective Agent"
 )
 
 

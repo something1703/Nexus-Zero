@@ -33,8 +33,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelna
 logger = logging.getLogger("historian-agent")
 
 mcp = FastMCP(
-    "Nexus-Zero Historian Agent",
-    description="Searches incident history and playbooks for similar past incidents and known solutions."
+    "Nexus-Zero Historian Agent"
 )
 
 

@@ -33,12 +33,7 @@ from common.db_utils import (
 # MCP Server
 # ---------------------------------------------------------------------------
 mcp = FastMCP(
-    "Executor Agent",
-    description=(
-        "Gated remediation engine for Nexus-Zero. Executes rollbacks, "
-        "scaling, and config changes — only after explicit approval. "
-        "All actions are audit-logged with full traceability."
-    ),
+    "Executor Agent"
 )
 
 # ---------------------------------------------------------------------------

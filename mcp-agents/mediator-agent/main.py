@@ -34,8 +34,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelna
 logger = logging.getLogger("mediator-agent")
 
 mcp = FastMCP(
-    "Nexus-Zero Mediator Agent",
-    description="Performs risk assessment and blast radius analysis to ensure safe remediation."
+    "Nexus-Zero Mediator Agent"
 )
 
 
