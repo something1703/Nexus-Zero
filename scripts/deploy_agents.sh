@@ -125,13 +125,15 @@ BUILDEOF
     # All agents get the same infrastructure env vars.
     # User-specific credentials (Gemini, GitHub, Slack) are injected
     # at runtime via each agent's set_credentials MCP tool.
-    # Create proper YAML file with quoted values to handle special characters
+    # Properly escape special characters in password for YAML format
+    local escaped_password=$(printf '%s\n' "$DB_PASSWORD" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    
     local env_file=$(mktemp --suffix=.yaml)
     cat > "$env_file" <<EOF
 GCP_PROJECT_ID: "${PROJECT_ID}"
 DB_NAME: "${DB_NAME}"
 DB_USER: "${DB_USER}"
-DB_PASSWORD: "${DB_PASSWORD}"
+DB_PASSWORD: "${escaped_password}"
 INSTANCE_CONNECTION_NAME: "${INSTANCE_CONNECTION_NAME}"
 EOF
 
