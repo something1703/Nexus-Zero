@@ -159,6 +159,15 @@ async def list_all_tools():
     return {"tools": cached_tools, "count": len(cached_tools)}
 
 
+@app.post("/refresh")
+async def refresh_tools():
+    """Force refresh tool cache from all agents."""
+    global tools_loaded
+    tools_loaded = False
+    await load_all_tools()
+    return {"status": "refreshed", "tools_loaded": len(cached_tools)}
+
+
 @app.post("/mcp")
 async def mcp_http_endpoint(request: Request):
     """
@@ -204,8 +213,8 @@ async def mcp_http_endpoint(request: Request):
 
         # ── tools/list ────────────────────────────────────────────────────
         if method == "tools/list":
-            if not tools_loaded:
-                await load_all_tools()
+            # Always refresh to pick up agent schema changes
+            await load_all_tools()
 
             return JSONResponse({
                 "jsonrpc": "2.0",
