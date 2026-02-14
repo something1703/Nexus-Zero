@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Nexus-Zero — Deploy All MCP Agents to Google Cloud Run
+# =============================================================================
+# Usage:
+#   chmod +x scripts/deploy_agents.sh
+#   ./scripts/deploy_agents.sh              # deploy all agents
+#   ./scripts/deploy_agents.sh sentinel     # deploy only sentinel-agent
+#   ./scripts/deploy_agents.sh detective    # deploy only detective-agent
+#
+# Prerequisites:
+#   - gcloud CLI authenticated with correct project
+#   - Docker / Cloud Build enabled
+#   - Cloud SQL instance running (nexus-zero-db)
+#   - Environment variables set (or use defaults below)
+# =============================================================================
+
+set -euo pipefail
+
+# ---- Configuration ----------------------------------------------------------
+PROJECT_ID="${GCP_PROJECT_ID:-nexus-zero-sre}"
+REGION="${GCP_REGION:-us-central1}"
+DB_NAME="${DB_NAME:-nexus_zero}"
+DB_USER="${DB_USER:-nexus_admin}"
+DB_PASSWORD="${DB_PASSWORD:-}"                        # REQUIRED
+INSTANCE_CONNECTION_NAME="${INSTANCE_CONNECTION_NAME:-${PROJECT_ID}:${REGION}:nexus-zero-db}"
+GEMINI_API_KEY="${GEMINI_API_KEY:-}"                   # needed by detective & mediator
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"                       # needed by detective
+GITHUB_REPO="${GITHUB_REPO:-}"                         # needed by detective
+SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-}"                 # optional
+SLACK_CHANNEL="${SLACK_CHANNEL:-}"                      # optional
+
+# Cloud Run settings
+MEMORY="512Mi"
+CPU="1"
+MIN_INSTANCES="0"          # scale-to-zero for cost savings
+MAX_INSTANCES="3"
+CONCURRENCY="80"
+TIMEOUT="300"
+
+# All agents
+ALL_AGENTS=("sentinel" "detective" "historian" "mediator" "executor")
+
+# ---- Helpers ----------------------------------------------------------------
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+info()  { echo -e "${CYAN}[INFO]${NC}  $*"; }
+ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+err()   { echo -e "${RED}[ERROR]${NC} $*"; }
+
+# ---- Validation -------------------------------------------------------------
+if [[ -z "$DB_PASSWORD" ]]; then
+    err "DB_PASSWORD is not set. Export it before running this script."
+    echo "  export DB_PASSWORD='your-password'"
+    exit 1
+fi
+
+# Make sure gcloud is configured
+info "Active GCP project: $(gcloud config get-value project 2>/dev/null)"
+gcloud config set project "$PROJECT_ID" --quiet
+
+# Enable required APIs (idempotent)
+info "Enabling required GCP APIs..."
+gcloud services enable \
+    run.googleapis.com \
+    cloudbuild.googleapis.com \
+    sqladmin.googleapis.com \
+    logging.googleapis.com \
+    artifactregistry.googleapis.com \
+    --quiet
+
+# ---- Determine which agents to deploy --------------------------------------
+if [[ $# -gt 0 ]]; then
+    AGENTS_TO_DEPLOY=("$@")
+else
+    AGENTS_TO_DEPLOY=("${ALL_AGENTS[@]}")
+fi
+
+info "Agents to deploy: ${AGENTS_TO_DEPLOY[*]}"
+
+# ---- Build & Deploy ---------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+AGENTS_DIR="$REPO_ROOT/mcp-agents"
+
+deploy_agent() {
+    local agent_name="$1"
+    local service_name="nexus-${agent_name}-agent"
+    local agent_dir="${AGENTS_DIR}/${agent_name}-agent"
+
+    if [[ ! -d "$agent_dir" ]]; then
+        err "Agent directory not found: $agent_dir"
+        return 1
+    fi
+
+    info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    info "Deploying: ${service_name}"
+    info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Build with Cloud Build (uses Dockerfile from agent directory)
+    # Docker build context = mcp-agents/ so Dockerfile can COPY common/
+    local image="gcr.io/${PROJECT_ID}/${service_name}"
+
+    info "Building Docker image: ${image}"
+    gcloud builds submit "$AGENTS_DIR" \
+        --tag "$image" \
+        --dockerfile "${agent_dir}/Dockerfile" \
+        --quiet
+
+    # Common env vars for all agents
+    local env_vars="GCP_PROJECT_ID=${PROJECT_ID}"
+    env_vars+=",DB_NAME=${DB_NAME}"
+    env_vars+=",DB_USER=${DB_USER}"
+    env_vars+=",DB_PASSWORD=${DB_PASSWORD}"
+    env_vars+=",INSTANCE_CONNECTION_NAME=${INSTANCE_CONNECTION_NAME}"
+
+    # Agent-specific env vars
+    case "$agent_name" in
+        detective)
+            env_vars+=",GEMINI_API_KEY=${GEMINI_API_KEY}"
+            env_vars+=",GITHUB_TOKEN=${GITHUB_TOKEN}"
+            env_vars+=",GITHUB_REPO=${GITHUB_REPO}"
+            ;;
+        mediator)
+            env_vars+=",GEMINI_API_KEY=${GEMINI_API_KEY}"
+            ;;
+        executor)
+            if [[ -n "$SLACK_BOT_TOKEN" ]]; then
+                env_vars+=",SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}"
+                env_vars+=",SLACK_CHANNEL=${SLACK_CHANNEL}"
+            fi
+            ;;
+    esac
+
+    info "Deploying to Cloud Run: ${service_name}"
+    gcloud run deploy "$service_name" \
+        --image "$image" \
+        --region "$REGION" \
+        --platform managed \
+        --allow-unauthenticated \
+        --add-cloudsql-instances "$INSTANCE_CONNECTION_NAME" \
+        --set-env-vars "$env_vars" \
+        --memory "$MEMORY" \
+        --cpu "$CPU" \
+        --min-instances "$MIN_INSTANCES" \
+        --max-instances "$MAX_INSTANCES" \
+        --concurrency "$CONCURRENCY" \
+        --timeout "$TIMEOUT" \
+        --port 8080 \
+        --quiet
+
+    # Get the deployed URL
+    local url
+    url=$(gcloud run services describe "$service_name" \
+        --region "$REGION" \
+        --format 'value(status.url)' 2>/dev/null)
+
+    ok "${service_name} deployed → ${url}"
+    echo ""
+    echo "  MCP SSE endpoint: ${url}/sse"
+    echo "  Health check:     curl ${url}/sse"
+    echo ""
+}
+
+# ---- Main loop --------------------------------------------------------------
+FAILED=()
+SUCCEEDED=()
+
+for agent in "${AGENTS_TO_DEPLOY[@]}"; do
+    if deploy_agent "$agent"; then
+        SUCCEEDED+=("$agent")
+    else
+        FAILED+=("$agent")
+    fi
+done
+
+# ---- Summary ----------------------------------------------------------------
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  DEPLOYMENT SUMMARY"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if [[ ${#SUCCEEDED[@]} -gt 0 ]]; then
+    ok "Succeeded: ${SUCCEEDED[*]}"
+fi
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+    err "Failed:    ${FAILED[*]}"
+fi
+
+echo ""
+info "Next steps:"
+echo "  1. Go to Archestra Hub and add each agent's SSE endpoint"
+echo "  2. SSE endpoints follow the pattern:"
+echo "     https://nexus-<agent>-agent-<hash>-uc.a.run.app/sse"
+echo "  3. Test with: gcloud run services list --region ${REGION}"
+echo ""
+
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+    exit 1
+fi
