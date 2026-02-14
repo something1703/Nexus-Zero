@@ -56,7 +56,7 @@ def _get_pending_actions(incident_id: str | None = None) -> list[dict]:
                 """
                 SELECT al.id, al.incident_id, al.agent_name, al.action_type,
                        al.action_details, al.status, al.created_at,
-                       i.title AS incident_title, i.severity
+                       i.service_name, i.severity
                 FROM audit_logs al
                 JOIN incidents i ON i.id = al.incident_id
                 WHERE al.status = 'pending_approval'
@@ -70,7 +70,7 @@ def _get_pending_actions(incident_id: str | None = None) -> list[dict]:
                 """
                 SELECT al.id, al.incident_id, al.agent_name, al.action_type,
                        al.action_details, al.status, al.created_at,
-                       i.title AS incident_title, i.severity
+                       i.service_name, i.severity
                 FROM audit_logs al
                 JOIN incidents i ON i.id = al.incident_id
                 WHERE al.status = 'pending_approval'
@@ -502,7 +502,7 @@ def get_execution_history(
                     SELECT al.id, al.incident_id, al.agent_name, al.action_type,
                            al.action_details, al.status, al.result,
                            al.created_at, al.completed_at,
-                           i.title AS incident_title
+                           i.service_name
                     FROM audit_logs al
                     JOIN incidents i ON i.id = al.incident_id
                     WHERE al.incident_id = %s
@@ -518,7 +518,7 @@ def get_execution_history(
                     SELECT al.id, al.incident_id, al.agent_name, al.action_type,
                            al.action_details, al.status, al.result,
                            al.created_at, al.completed_at,
-                           i.title AS incident_title
+                           i.service_name
                     FROM audit_logs al
                     JOIN incidents i ON i.id = al.incident_id
                     WHERE al.status IN ('completed', 'rejected', 'failed')
