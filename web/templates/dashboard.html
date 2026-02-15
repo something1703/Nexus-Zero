@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus-Zero — Autonomous SRE Platform</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ================================================
+           NEXUS-ZERO DASHBOARD — DARK THEME
+           ================================================ */
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a2332;
+            --bg-card-hover: #1f2b3d;
+            --border: #2d3748;
+            --border-glow: rgba(99, 179, 237, 0.3);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #22d3ee;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-orange: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --gradient-primary: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            --gradient-danger: linear-gradient(135deg, #ef4444, #f59e0b);
+            --gradient-success: linear-gradient(135deg, #10b981, #22d3ee);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+            --radius: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ---- Background Animation ---- */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 50% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ---- Header ---- */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: 800;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+        .logo-sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            animation: pulse-dot 2s infinite;
+        }
+        .status-dot.error { background: var(--accent-red); }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ---- Main Layout ---- */
+        .main {
+            padding: 24px 32px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ---- Stats Bar ---- */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            transition: all 0.2s;
+        }
+        .stat-card:hover {
+            border-color: var(--border-glow);
+            box-shadow: var(--shadow);
+        }
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .stat-value.blue { color: var(--accent-blue); }
+        .stat-value.red { color: var(--accent-red); }
+        .stat-value.green { color: var(--accent-green); }
+        .stat-value.orange { color: var(--accent-orange); }
+        .stat-value.purple { color: var(--accent-purple); }
+
+        /* ---- Sections ---- */
+        .section {
+            margin-bottom: 28px;
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-title .icon {
+            font-size: 20px;
+        }
+
+        /* ---- Chaos Control Panel ---- */
+        .chaos-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .chaos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .chaos-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            transition: all 0.3s;
+            cursor: default;
+        }
+        .chaos-card:hover {
+            border-color: var(--accent-red);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.1);
+        }
+        .chaos-service {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .chaos-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+        }
+        .chaos-modes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        /* ---- Buttons ---- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .btn-danger:hover:not(:disabled) {
+            background: rgba(239, 68, 68, 0.25);
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
+        }
+        .btn-success {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .btn-success:hover:not(:disabled) {
+            background: rgba(16, 185, 129, 0.25);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+        }
+        .btn-primary {
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+        }
+        .btn-primary:hover:not(:disabled) {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+            transform: translateY(-1px);
+        }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        .btn-ghost:hover:not(:disabled) {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .btn-lg {
+            padding: 12px 24px;
+            font-size: 15px;
+        }
+
+        /* ---- Detection Button ---- */
+        .detect-bar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .detect-bar .btn-primary {
+            padding: 10px 24px;
+            font-size: 14px;
+        }
+
+        /* ---- Incident Table ---- */
+        .incident-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .incident-table th {
+            text-align: left;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .incident-table td {
+            padding: 14px 16px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(45, 55, 72, 0.5);
+            vertical-align: middle;
+        }
+        .incident-table tr {
+            transition: background 0.15s;
+        }
+        .incident-table tbody tr:hover {
+            background: var(--bg-card-hover);
+            cursor: pointer;
+        }
+
+        /* ---- Badges ---- */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .badge-critical {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .badge-high {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--accent-orange);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .badge-medium {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        .badge-low {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .badge-open {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+        }
+        .badge-investigating {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--accent-orange);
+        }
+        .badge-resolved {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-green);
+        }
+        .badge-closed {
+            background: rgba(100, 116, 139, 0.15);
+            color: var(--text-muted);
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        /* ---- Approval Cards ---- */
+        .approval-list {
+            display: grid;
+            gap: 12px;
+        }
+        .approval-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: var(--radius);
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            animation: glow-pulse 3s infinite;
+        }
+        @keyframes glow-pulse {
+            0%, 100% { box-shadow: 0 0 5px rgba(245, 158, 11, 0.1); }
+            50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.15); }
+        }
+        .approval-info h4 {
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+        .approval-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .approval-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* ---- Timeline / Detail Panel ---- */
+        .detail-panel {
+            display: none;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-top: 16px;
+        }
+        .detail-panel.active {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .timeline {
+            position: relative;
+            padding-left: 32px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 12px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--border);
+        }
+        .timeline-item {
+            position: relative;
+            padding: 12px 0;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 16px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-blue);
+            background: var(--bg-primary);
+        }
+        .timeline-item.success::before { border-color: var(--accent-green); background: var(--accent-green); }
+        .timeline-item.failed::before { border-color: var(--accent-red); background: var(--accent-red); }
+        .timeline-item.pending::before { border-color: var(--accent-orange); background: var(--accent-orange); animation: pulse-dot 2s infinite; }
+
+        .timeline-agent {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent-cyan);
+        }
+        .timeline-action {
+            font-size: 14px;
+            margin-top: 2px;
+        }
+        .timeline-time {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .timeline-summary {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        /* ---- Toast Notifications ---- */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toast {
+            padding: 14px 20px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 500;
+            animation: toastIn 0.3s ease, toastOut 0.3s ease 4.7s forwards;
+            backdrop-filter: blur(12px);
+            max-width: 400px;
+        }
+        .toast-success {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            color: var(--accent-green);
+        }
+        .toast-error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: var(--accent-red);
+        }
+        .toast-info {
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: var(--accent-blue);
+        }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(100px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes toastOut {
+            from { opacity: 1; }
+            to { opacity: 0; transform: translateY(20px); }
+        }
+
+        /* ---- Loading Spinner ---- */
+        .spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ---- Empty State ---- */
+        .empty-state {
+            text-align: center;
+            padding: 48px;
+            color: var(--text-muted);
+        }
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        /* ---- Agent Icons ---- */
+        .agent-icon {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 768px) {
+            .header { padding: 12px 16px; }
+            .main { padding: 16px; }
+            .stats-bar { grid-template-columns: repeat(2, 1fr); }
+            .chaos-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ============================================ -->
+<!-- HEADER                                       -->
+<!-- ============================================ -->
+<header class="header">
+    <div class="header-left">
+        <div>
+            <div class="logo">NEXUS-ZERO</div>
+            <div class="logo-sub">Autonomous SRE Platform</div>
+        </div>
+    </div>
+    <div class="header-status">
+        <div class="status-badge">
+            <span class="status-dot" id="db-status"></span>
+            <span>Database</span>
+        </div>
+        <div class="status-badge">
+            <span class="status-dot" id="agent-status"></span>
+            <span>Agents</span>
+        </div>
+        <div class="status-badge" style="color: var(--text-muted);">
+            Auto-refresh: <span id="refresh-countdown">3s</span>
+        </div>
+    </div>
+</header>
+
+<!-- ============================================ -->
+<!-- MAIN CONTENT                                 -->
+<!-- ============================================ -->
+<main class="main">
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="stat-card">
+            <div class="stat-label">Total Incidents</div>
+            <div class="stat-value blue" id="stat-total">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Active Now</div>
+            <div class="stat-value red" id="stat-active">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Resolved</div>
+            <div class="stat-value green" id="stat-resolved">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Avg Resolution</div>
+            <div class="stat-value purple" id="stat-avg-time">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Pending Approvals</div>
+            <div class="stat-value orange" id="stat-pending">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Agent Actions</div>
+            <div class="stat-value blue" id="stat-actions">—</div>
+        </div>
+    </div>
+
+    <!-- Chaos Control Panel -->
+    <div class="section">
+        <div class="section-header">
+            <h2 class="section-title"><span class="icon">💣</span> Chaos Control Panel</h2>
+            <div class="detect-bar">
+                <button class="btn btn-ghost btn-sm" onclick="stopAllChaos()">🛑 Stop All Chaos</button>
+                <button class="btn btn-primary btn-lg" onclick="triggerDetection()" id="detect-btn">
+                    🔍 Run Sentinel Detection
+                </button>
+            </div>
+        </div>
+
+        <div class="chaos-grid">
+            <div class="chaos-card">
+                <div class="chaos-service">🛒 Order Service</div>
+                <div class="chaos-desc">E-commerce order processing API</div>
+                <div class="chaos-modes">
+                    <button class="btn btn-danger btn-sm" onclick="injectChaos('order', 'db_pool_exhaustion')">💥 DB Pool Exhaustion</button>
+                    <button class="btn btn-danger btn-sm" onclick="injectChaos('order', 'cascading_timeout')">⏱️ Cascade Timeout</button>
+                </div>
+            </div>
+            <div class="chaos-card">
+                <div class="chaos-service">💳 Payment Service</div>
+                <div class="chaos-desc">Payment processing and validation API</div>
+                <div class="chaos-modes">
+                    <button class="btn btn-danger btn-sm" onclick="injectChaos('payment', 'memory_leak')">🧠 Memory Leak</button>
+                    <button class="btn btn-danger btn-sm" onclick="injectChaos('payment', 'latency_spike')">🐌 Latency Spike</button>
+                </div>
+            </div>
+            <div class="chaos-card">
+                <div class="chaos-service">📧 Notification Service</div>
+                <div class="chaos-desc">Email/SMS notification delivery API</div>
+                <div class="chaos-modes">
+                    <button class="btn btn-danger btn-sm" onclick="injectChaos('notification', 'cascade_failure')">🔥 Cascade Failure</button>
+                    <button class="btn btn-danger btn-sm" onclick="injectChaos('notification', 'latency_spike')">🐌 Latency Spike</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Approvals -->
+    <div class="section" id="approvals-section" style="display: none;">
+        <div class="section-header">
+            <h2 class="section-title"><span class="icon">🔒</span> Pending Approvals</h2>
+        </div>
+        <div class="approval-list" id="approval-list"></div>
+    </div>
+
+    <!-- Incident Feed -->
+    <div class="section">
+        <div class="section-header">
+            <h2 class="section-title"><span class="icon">🚨</span> Incident Feed</h2>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-ghost btn-sm" onclick="filterIncidents('all')">All</button>
+                <button class="btn btn-ghost btn-sm" onclick="filterIncidents('open')">Open</button>
+                <button class="btn btn-ghost btn-sm" onclick="filterIncidents('investigating')">Investigating</button>
+                <button class="btn btn-ghost btn-sm" onclick="filterIncidents('resolved')">Resolved</button>
+            </div>
+        </div>
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;">
+            <table class="incident-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Service</th>
+                        <th>Severity</th>
+                        <th>Status</th>
+                        <th>Errors</th>
+                        <th>Error Type</th>
+                        <th>Created</th>
+                        <th>Resolution</th>
+                    </tr>
+                </thead>
+                <tbody id="incident-tbody">
+                    <tr><td colspan="8" class="empty-state"><div class="icon">📡</div>No incidents detected yet. Inject chaos to begin.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Incident Detail Panel -->
+    <div class="detail-panel" id="detail-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 id="detail-title" style="font-size: 18px;">Incident Details</h3>
+            <button class="btn btn-ghost btn-sm" onclick="closeDetail()">✕ Close</button>
+        </div>
+        <div id="detail-meta" style="margin-bottom: 20px;"></div>
+        <h4 style="margin-bottom: 12px; font-size: 14px; color: var(--text-secondary);">Agent Activity Timeline</h4>
+        <div class="timeline" id="detail-timeline"></div>
+    </div>
+</main>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ============================================ -->
+<!-- JAVASCRIPT                                   -->
+<!-- ============================================ -->
+<script>
+    const API = '';
+    let currentFilter = 'all';
+    let selectedIncident = null;
+    let refreshInterval = null;
+
+    // ---- Initialization ----
+    document.addEventListener('DOMContentLoaded', () => {
+        refreshAll();
+        refreshInterval = setInterval(refreshAll, 3000);
+        startCountdown();
+    });
+
+    function startCountdown() {
+        let count = 3;
+        setInterval(() => {
+            count = count <= 0 ? 3 : count - 1;
+            document.getElementById('refresh-countdown').textContent = count + 's';
+        }, 1000);
+    }
+
+    // ---- Refresh All Data ----
+    async function refreshAll() {
+        try {
+            await Promise.all([
+                refreshStats(),
+                refreshIncidents(),
+                refreshApprovals(),
+            ]);
+            document.getElementById('db-status').className = 'status-dot';
+            document.getElementById('agent-status').className = 'status-dot';
+        } catch (e) {
+            document.getElementById('db-status').className = 'status-dot error';
+            console.error('Refresh failed:', e);
+        }
+    }
+
+    // ---- Stats ----
+    async function refreshStats() {
+        const resp = await fetch(`${API}/api/stats`);
+        const data = await resp.json();
+        document.getElementById('stat-total').textContent = data.total_incidents || 0;
+        document.getElementById('stat-active').textContent = data.active_incidents || 0;
+        document.getElementById('stat-resolved').textContent = data.resolved_incidents || 0;
+        document.getElementById('stat-pending').textContent = data.pending_approvals || 0;
+        document.getElementById('stat-actions').textContent = data.total_agent_actions || 0;
+
+        const avgTime = data.avg_resolution_time_seconds;
+        if (avgTime && avgTime > 0) {
+            if (avgTime < 60) {
+                document.getElementById('stat-avg-time').textContent = Math.round(avgTime) + 's';
+            } else {
+                document.getElementById('stat-avg-time').textContent = Math.round(avgTime / 60) + 'm';
+            }
+        } else {
+            document.getElementById('stat-avg-time').textContent = '—';
+        }
+    }
+
+    // ---- Incidents ----
+    async function refreshIncidents() {
+        const url = currentFilter === 'all'
+            ? `${API}/api/incidents?limit=30`
+            : `${API}/api/incidents?status=${currentFilter}&limit=30`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        renderIncidents(data.incidents || []);
+    }
+
+    function renderIncidents(incidents) {
+        const tbody = document.getElementById('incident-tbody');
+        if (!incidents.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="icon">📡</div>No incidents found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = incidents.map(inc => {
+            const id = inc.id || '';
+            const shortId = id.substring(0, 8);
+            const created = formatTime(inc.created_at);
+            const resolution = inc.resolution_action
+                ? `<span class="badge badge-resolved">${inc.resolution_action}</span>`
+                : '<span style="color: var(--text-muted)">—</span>';
+            const resTime = inc.resolution_time_seconds
+                ? `<span style="color: var(--text-muted); font-size: 11px;">(${Math.round(inc.resolution_time_seconds)}s)</span>`
+                : '';
+
+            return `
+                <tr onclick="showDetail('${id}')">
+                    <td><span class="mono">${shortId}…</span></td>
+                    <td>${inc.service_name || '—'}</td>
+                    <td><span class="badge badge-${inc.severity}">${inc.severity}</span></td>
+                    <td><span class="badge badge-${inc.status}">${inc.status}</span></td>
+                    <td><span class="mono">${inc.error_count || 0}</span></td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-secondary);">${inc.error_signature || '—'}</td>
+                    <td style="font-size: 12px; color: var(--text-muted);">${created}</td>
+                    <td>${resolution} ${resTime}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function filterIncidents(status) {
+        currentFilter = status;
+        refreshIncidents();
+    }
+
+    // ---- Incident Detail ----
+    async function showDetail(incidentId) {
+        selectedIncident = incidentId;
+        const resp = await fetch(`${API}/api/incidents/${incidentId}`);
+        const data = await resp.json();
+        const inc = data.incident;
+        const logs = data.audit_logs || [];
+
+        document.getElementById('detail-title').textContent =
+            `Incident ${incidentId.substring(0, 8)}… — ${inc.service_name}`;
+
+        document.getElementById('detail-meta').innerHTML = `
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+                <div><span style="color: var(--text-muted); font-size: 12px;">Service</span><br><strong>${inc.service_name}</strong></div>
+                <div><span style="color: var(--text-muted); font-size: 12px;">Severity</span><br><span class="badge badge-${inc.severity}">${inc.severity}</span></div>
+                <div><span style="color: var(--text-muted); font-size: 12px;">Status</span><br><span class="badge badge-${inc.status}">${inc.status}</span></div>
+                <div><span style="color: var(--text-muted); font-size: 12px;">Errors</span><br><strong class="mono">${inc.error_count}</strong></div>
+                <div><span style="color: var(--text-muted); font-size: 12px;">Created</span><br><span class="mono" style="font-size: 12px;">${formatTime(inc.created_at)}</span></div>
+                <div><span style="color: var(--text-muted); font-size: 12px;">Resolution</span><br><strong>${inc.resolution_action || '—'}</strong></div>
+            </div>
+        `;
+
+        const agentEmojis = {
+            sentinel: '🛡️', detective: '🔍', historian: '📚',
+            mediator: '⚖️', executor: '🚀', dashboard: '🖥️'
+        };
+
+        document.getElementById('detail-timeline').innerHTML = logs.map(log => {
+            const emoji = agentEmojis[log.agent_name] || '🤖';
+            let summary = '';
+            if (log.result) {
+                try {
+                    const r = typeof log.result === 'string' ? JSON.parse(log.result) : log.result;
+                    summary = `<div class="timeline-summary">${JSON.stringify(r, null, 2).substring(0, 300)}</div>`;
+                } catch(e) { summary = ''; }
+            }
+            if (log.error_message) {
+                summary = `<div class="timeline-summary" style="border-color: var(--accent-red);">${log.error_message}</div>`;
+            }
+
+            return `
+                <div class="timeline-item ${log.status}">
+                    <div class="timeline-agent">${emoji} ${log.agent_name}</div>
+                    <div class="timeline-action">${log.action_type} → <span class="badge badge-${log.status === 'success' ? 'resolved' : log.status === 'failed' ? 'critical' : 'investigating'}">${log.status}</span></div>
+                    <div class="timeline-time">${formatTime(log.created_at)}</div>
+                    ${summary}
+                </div>
+            `;
+        }).join('') || '<div class="empty-state">No agent activity yet</div>';
+
+        document.getElementById('detail-panel').classList.add('active');
+    }
+
+    function closeDetail() {
+        document.getElementById('detail-panel').classList.remove('active');
+        selectedIncident = null;
+    }
+
+    // ---- Approvals ----
+    async function refreshApprovals() {
+        const resp = await fetch(`${API}/api/approvals`);
+        const data = await resp.json();
+        const section = document.getElementById('approvals-section');
+        const list = document.getElementById('approval-list');
+
+        if (!data.count) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        list.innerHTML = data.actions.map(action => {
+            const details = action.action_details || {};
+            return `
+                <div class="approval-card">
+                    <div class="approval-info">
+                        <h4>🔒 ${action.action_type.toUpperCase()} on ${action.service_name}</h4>
+                        <div class="approval-meta">
+                            Incident: ${(action.incident_id || '').substring(0, 8)}… •
+                            Severity: <span class="badge badge-${action.severity}">${action.severity}</span> •
+                            Safety: ${details.safety_score || '—'} •
+                            Verdict: ${details.verdict || '—'}
+                        </div>
+                    </div>
+                    <div class="approval-actions">
+                        <button class="btn btn-success" onclick="approveAction('${action.id}')">
+                            ✅ Approve
+                        </button>
+                        <button class="btn btn-danger" onclick="rejectAction('${action.id}')">
+                            ❌ Reject
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function approveAction(id) {
+        try {
+            const resp = await fetch(`${API}/api/approvals/${id}/approve`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({approved_by: 'judge'})
+            });
+            const data = await resp.json();
+            showToast(`✅ Action approved! ${data.action_type} on ${data.service} executed.`, 'success');
+            refreshAll();
+        } catch(e) {
+            showToast('❌ Approval failed: ' + e.message, 'error');
+        }
+    }
+
+    async function rejectAction(id) {
+        try {
+            await fetch(`${API}/api/approvals/${id}/reject`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({reason: 'Rejected by judge'})
+            });
+            showToast('❌ Action rejected.', 'info');
+            refreshAll();
+        } catch(e) {
+            showToast('Rejection failed: ' + e.message, 'error');
+        }
+    }
+
+    // ---- Chaos Injection ----
+    async function injectChaos(service, mode) {
+        const btn = event.target;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Injecting...';
+
+        try {
+            const resp = await fetch(`${API}/api/chaos/inject`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({service, mode})
+            });
+            const data = await resp.json();
+
+            if (data.status === 'chaos_injected') {
+                showToast(`💣 Chaos injected! ${mode} enabled on ${service}-api. Errors being generated...`, 'info');
+            } else {
+                showToast(`⚠️ ${data.message || 'Chaos injection issue'}`, 'error');
+            }
+        } catch(e) {
+            showToast('❌ Failed to inject chaos: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = btn.textContent;
+            // Force refresh
+            setTimeout(refreshAll, 2000);
+        }
+    }
+
+    async function stopAllChaos() {
+        try {
+            await fetch(`${API}/api/chaos/stop`, {method: 'POST'});
+            showToast('🛑 Chaos stopped on all services.', 'success');
+        } catch(e) {
+            showToast('Failed to stop chaos: ' + e.message, 'error');
+        }
+    }
+
+    // ---- Sentinel Detection ----
+    async function triggerDetection() {
+        const btn = document.getElementById('detect-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Sentinel scanning...';
+
+        try {
+            const resp = await fetch(`${API}/api/detect`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({time_window_minutes: 5})
+            });
+            const data = await resp.json();
+
+            if (data.status === 'detection_triggered') {
+                showToast('🔍 Sentinel agent scanning for anomalies. Watch incidents feed for results...', 'info');
+            } else {
+                showToast(`⚠️ ${data.message || 'Detection issue'}`, 'error');
+            }
+        } catch(e) {
+            showToast('❌ Detection failed: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '🔍 Run Sentinel Detection';
+        }
+    }
+
+    // ---- Utilities ----
+    function formatTime(isoString) {
+        if (!isoString) return '—';
+        const d = new Date(isoString);
+        return d.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false});
+    }
+
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
+    }
+</script>
+
+</body>
+</html>
