@@ -254,16 +254,13 @@ def approve_action(audit_log_id: str, approved_by: str = "operator") -> str:
                 "action_details", "status", "affected_service"]
         action = dict(zip(cols, row))
 
-        if action["status"] != "pending_approval":
+        if action["status"] != "pending":
             return json.dumps({
                 "error": (
                     f"Action {audit_log_id} has status '{action['status']}' — "
-                    "only 'pending_approval' actions can be approved."
+                    "only 'pending' actions can be approved."
                 )
             })
-
-        # Mark as executing
-        update_audit_log(audit_log_id, status="executing")
 
         # Parse action details
         details = action["action_details"]
@@ -303,7 +300,7 @@ def approve_action(audit_log_id: str, approved_by: str = "operator") -> str:
         # Update audit log with result
         update_audit_log(
             audit_log_id,
-            status="completed",
+            status="success",
             result=result,
         )
 
@@ -353,11 +350,11 @@ def reject_action(audit_log_id: int, reason: str = "Rejected by operator") -> st
         if not row:
             return json.dumps({"error": f"Audit log {audit_log_id} not found."})
 
-        if row[1] != "pending_approval":
+        if row[1] != "pending":
             return json.dumps({
                 "error": (
                     f"Action {audit_log_id} has status '{row[1]}' — "
-                    "only 'pending_approval' actions can be rejected."
+                    "only 'pending' actions can be rejected."
                 )
             })
 
@@ -432,13 +429,13 @@ def execute_emergency_action(
         # Parse details
         details = json.loads(action_details) if isinstance(action_details, str) else action_details
 
-        # Create audit log entry (skip pending, go straight to executing)
+        # Create audit log entry and execute immediately
         audit_id = create_audit_log(
             incident_id=incident_id,
             agent_name="executor-agent",
             action_type=action_type,
             action_details=details,
-            status="executing",
+            status="pending",
         )
 
         # Execute immediately
@@ -449,7 +446,7 @@ def execute_emergency_action(
             result = {
                 "action": action_type,
                 "service": service_name,
-                "status": "completed",
+                "status": "success",
                 "message": f"Emergency custom action '{action_type}' executed.",
                 "simulated": True,
             }
@@ -459,7 +456,7 @@ def execute_emergency_action(
         result["executed_at"] = datetime.datetime.utcnow().isoformat()
 
         # Update audit log
-        update_audit_log(audit_id, status="completed", result=result)
+        update_audit_log(audit_id, status="success", result=result)
 
         # Update incident
         update_incident(
