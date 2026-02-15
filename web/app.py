@@ -243,10 +243,14 @@ def health_check():
 # ---------------------------------------------------------------------------
 # API Routes — Runtime Configuration (Live Demo Credentials)
 # ---------------------------------------------------------------------------
-# In-memory overrides so judges can paste their own Archestra credentials
-# directly from the dashboard settings panel without redeploying.
+# In-memory credential store for Detective Agent (Gemini + GitHub)
+# Judges can paste their own keys from the dashboard Settings modal.
+# These propagate to Detective via the Bridge on save.
 _runtime_config = {}
 _config_lock = threading.Lock()
+
+# Bridge URL for propagating credentials to agents
+BRIDGE_URL = os.environ.get("BRIDGE_URL", "https://nexus-bridge-833613368271.us-central1.run.app")
 
 
 def _get_config(key, env_fallback):
@@ -258,32 +262,71 @@ def _get_config(key, env_fallback):
 
 @app.route("/api/config", methods=["GET"])
 def get_config():
-    """Return current credential configuration status (redacted)."""
-    archestra_token = _get_config("ARCHESTRA_TOKEN", "ARCHESTRA_TOKEN")
-    sentinel_id = _get_config("SENTINEL_AGENT_ID", "SENTINEL_AGENT_ID")
-    hub_url = _get_config("ARCHESTRA_HUB_URL", "ARCHESTRA_HUB_URL")
+    """Return current Detective credential status (redacted)."""
+    gemini_key = _get_config("GEMINI_API_KEY", "GEMINI_API_KEY")
+    github_token = _get_config("GITHUB_TOKEN", "GITHUB_TOKEN")
+    github_repo = _get_config("GITHUB_REPO", "GITHUB_REPO")
     return jsonify({
-        "archestra_token_set": bool(archestra_token),
-        "archestra_token_preview": f"{archestra_token[:12]}…" if archestra_token and len(archestra_token) > 12 else ("set" if archestra_token else "not set"),
-        "sentinel_agent_id": sentinel_id or "not set",
-        "archestra_hub_url": hub_url or "not set",
+        "gemini_api_key_set": bool(gemini_key),
+        "gemini_api_key_preview": f"{gemini_key[:8]}..." if gemini_key and len(gemini_key) > 8 else ("set" if gemini_key else "not set"),
+        "github_token_set": bool(github_token),
+        "github_token_preview": f"{github_token[:8]}..." if github_token and len(github_token) > 8 else ("set" if github_token else "not set"),
+        "github_repo": github_repo or "not set",
+        "detective_enabled": bool(gemini_key),
     })
 
 
 @app.route("/api/config", methods=["POST"])
 def update_config():
-    """Update runtime credentials for the live demo.
-    Accepts: archestra_token, sentinel_agent_id, archestra_hub_url
+    """Update Detective Agent credentials and propagate to the agent via Bridge.
+    Accepts: gemini_api_key, github_token, github_repo
     """
     data = request.get_json(force=True)
     updated = []
+    creds_for_agent = {}
+
     with _config_lock:
-        for key in ("ARCHESTRA_TOKEN", "SENTINEL_AGENT_ID", "ARCHESTRA_HUB_URL"):
-            val = data.get(key.lower()) or data.get(key)
-            if val and val.strip():
-                _runtime_config[key] = val.strip()
-                updated.append(key)
-    return jsonify({"status": "updated", "keys": updated})
+        if data.get("gemini_api_key"):
+            _runtime_config["GEMINI_API_KEY"] = data["gemini_api_key"].strip()
+            creds_for_agent["gemini_api_key"] = data["gemini_api_key"].strip()
+            updated.append("GEMINI_API_KEY")
+        if data.get("github_token"):
+            _runtime_config["GITHUB_TOKEN"] = data["github_token"].strip()
+            creds_for_agent["github_token"] = data["github_token"].strip()
+            updated.append("GITHUB_TOKEN")
+        if data.get("github_repo"):
+            _runtime_config["GITHUB_REPO"] = data["github_repo"].strip()
+            creds_for_agent["github_repo"] = data["github_repo"].strip()
+            updated.append("GITHUB_REPO")
+
+    # Propagate credentials to Detective Agent via Bridge (fire-and-forget)
+    if creds_for_agent and BRIDGE_URL:
+        def _propagate():
+            try:
+                resp = http_requests.post(
+                    f"{BRIDGE_URL}/mcp",
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 999,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "detective_set_credentials",
+                            "arguments": creds_for_agent
+                        }
+                    },
+                    timeout=10
+                )
+                if resp.status_code == 200:
+                    logger.info(f"✅ Propagated credentials to Detective: {list(creds_for_agent.keys())}")
+                else:
+                    logger.warning(f"Bridge returned {resp.status_code}: {resp.text[:200]}")
+            except Exception as e:
+                logger.warning(f"Failed to propagate credentials to Detective: {e}")
+        threading.Thread(target=_propagate, daemon=True).start()
+    elif creds_for_agent and not BRIDGE_URL:
+        logger.warning("BRIDGE_URL not configured — credentials saved locally but not propagated to Detective")
+
+    return jsonify({"status": "updated", "keys": updated, "detective_enabled": "GEMINI_API_KEY" in updated or bool(_get_config("GEMINI_API_KEY", "GEMINI_API_KEY"))})
 
 
 # ---------------------------------------------------------------------------
@@ -866,68 +909,230 @@ def agent_activity():
 
 
 def _generate_agent_thinking(agent, action, status, result, details, error):
-    """Generate human-readable reasoning for what the agent is doing."""
+    """Generate human-readable reasoning for what the agent is doing.
+    
+    Extracts rich details from agent results to provide transparency into
+    the autonomous decision-making process. This is the 'glass box' view
+    of the agent parliament for judges and operators.
+    """
     r = result or {}
     d = details or {}
 
+    # ── Sentinel Agent ─────────────────────────────────────────────────────
     if agent == "sentinel":
         if action == "detect_anomalies":
-            total = r.get("total_errors", r.get("anomalies_found", "?"))
-            svcs = r.get("services_affected", "?")
-            return f"Scanning GCP Cloud Logging for anomalies… Found {total} errors across {svcs} services. Creating incidents for investigation."
+            if status == "failed":
+                return f"❌ GCP Cloud Logging scan failed: {error or 'unable to query logs'}. Check service account permissions."
+            
+            total = r.get("total_errors", 0)
+            svcs = r.get("services_affected", 0)
+            incidents = r.get("incidents_created", 0)
+            window = d.get("time_window_minutes", 5)
+            
+            if total == 0:
+                return f"✅ Scanned last {window} minutes of GCP Cloud Logging. All clear — no anomalies detected."
+            
+            # Extract incident details for richer display
+            inc_list = r.get("incidents", [])
+            if inc_list and len(inc_list) > 0:
+                top_inc = inc_list[0]
+                svc = top_inc.get("service_name", "unknown")
+                sev = top_inc.get("severity", "?")
+                err_count = top_inc.get("error_count", "?")
+                return f"🚨 Scanned {window}m of logs → Found {total} errors across {svcs} services. Created {incidents} incidents. Top: {svc} ({sev}, {err_count} errors). Dispatching to Detective + Historian."
+            
+            return f"🔍 Scanned {window} minutes of GCP logs. Found {total} errors across {svcs} services. Created {incidents} incident(s) for investigation."
+        
         if action == "acknowledge_incident":
-            return f"New incident detected. Acknowledging and dispatching to Detective + Historian for parallel investigation."
+            inc_id = d.get("incident_id", "")[:8] if d.get("incident_id") else "?"
+            return f"📋 Acknowledged incident {inc_id}… → Status changed to 'investigating'. Dispatching to Detective (root cause) + Historian (solutions) in parallel."
+        
+        if action == "get_service_health":
+            healthy = r.get("healthy", 0)
+            degraded = r.get("degraded", 0)
+            down = r.get("down", 0)
+            total = r.get("total_services", 0)
+            return f"🏥 Health check: {healthy}/{total} services healthy, {degraded} degraded, {down} down."
 
+    # ── Detective Agent ────────────────────────────────────────────────────
     if agent == "detective":
         if action == "investigate_root_cause":
             if status == "failed":
-                return f"Attempted root cause analysis by querying service metrics and logs. Investigation encountered an error: {error or 'unknown'}. Falling back to Historian recommendations."
-            return f"Analyzing service behavior patterns, error correlations, and deployment history to identify root cause."
+                return f"❌ Root cause investigation failed: {error or 'unknown error'}. Falling back to Historian pattern-based recommendations."
+            
+            root_cause = r.get("root_cause", "")
+            confidence = r.get("confidence_score", 0)
+            suspect = r.get("suspect_commit", "")
+            suspect_file = r.get("suspect_file", "")
+            logs_analyzed = r.get("evidence", {}).get("log_entries_analyzed", 0) if isinstance(r.get("evidence"), dict) else 0
+            commits_analyzed = r.get("evidence", {}).get("commits_analyzed", 0) if isinstance(r.get("evidence"), dict) else 0
+            
+            parts = [f"🔬 Investigation complete (confidence: {int(confidence*100)}%)"]
+            if logs_analyzed:
+                parts.append(f"Analyzed {logs_analyzed} log entries")
+            if commits_analyzed:
+                parts.append(f"correlated with {commits_analyzed} recent commits")
+            if suspect:
+                parts.append(f"Suspect commit: {suspect[:8]}")
+            if suspect_file:
+                parts.append(f"in {suspect_file}")
+            if root_cause:
+                # Truncate root cause to fit
+                rc_short = root_cause[:150] + "…" if len(root_cause) > 150 else root_cause
+                parts.append(f"→ {rc_short}")
+            
+            return ". ".join(parts[:3]) + (f". {parts[-1]}" if len(parts) > 3 else "")
+        
         if action == "analyze_logs":
             if status == "failed":
-                return f"Queried GCP Cloud Logging for recent error patterns. Log analysis failed: {error or 'unknown'}. Historian will provide fallback solutions."
+                return f"❌ Log analysis failed: {error or 'Cloud Logging query error'}. Check GCP permissions or try wider time window."
+            
+            total_logs = r.get("total_log_entries", 0)
+            patterns = r.get("unique_error_patterns", 0)
             window = d.get("time_window", 30)
-            return f"Pulling last {window} minutes of structured logs from Cloud Logging. Analyzing error frequency, stack traces, and correlation patterns."
+            service = r.get("service_name", "")
+            
+            return f"📊 Pulled {total_logs} log entries from {service or 'target service'} (last {window}m). Identified {patterns} unique error patterns. Correlating with deployment history…"
+        
+        if action == "correlate_with_commits":
+            if status == "failed":
+                return f"❌ GitHub correlation failed: {error or 'check GITHUB_TOKEN'}. Enable via ⚙️ Settings for commit-based root cause analysis."
+            
+            commits = r.get("total_commits_analyzed", 0)
+            top = r.get("top_suspect", {})
+            
+            if not commits:
+                return "📝 No recent commits found in the analysis window. Root cause likely in infrastructure or external dependencies."
+            
+            if top:
+                sha = top.get("sha", "")[:8]
+                author = top.get("author", "")
+                msg = top.get("message", "")[:50]
+                score = top.get("suspicion_score", 0)
+                return f"🔗 Analyzed {commits} commits. Top suspect: {sha} by {author} — \"{msg}\" (suspicion score: {score})"
+            
+            return f"🔗 Analyzed {commits} recent commits. No high-confidence suspects found."
+        
+        if action == "set_credentials":
+            keys = r.get("keys_set", [])
+            return f"🔐 Credentials updated: {', '.join(keys)}. Detective agent now has {'full' if 'GEMINI_API_KEY' in keys else 'partial'} analysis capabilities."
 
+    # ── Historian Agent ────────────────────────────────────────────────────
     if agent == "historian":
         if action == "get_recommended_solutions":
-            sols = r.get("total_solutions", "?")
+            if status == "failed":
+                return f"❌ Solution lookup failed: {error or 'playbook database error'}."
+            
+            sols = r.get("total_solutions", 0)
             top = r.get("top_recommendation", {})
-            top_action = top.get("action_type", "?")
-            confidence = top.get("confidence", "?")
+            
+            if not sols:
+                return "📚 No matching solutions found in playbook database. This may be a novel incident type — consider manual investigation."
+            
+            top_action = top.get("action_type", "unknown")
+            confidence = top.get("confidence", 0)
             source = top.get("source_name", "playbook")
-            return f"Searched playbook database and past incident history. Found {sols} solutions. Top recommendation: {top_action} (confidence: {confidence}) from '{source}'."
+            success_rate = top.get("historical_success_rate")
+            
+            parts = [f"📚 Found {sols} solutions in playbook database"]
+            parts.append(f"Top recommendation: **{top_action}** (confidence: {int(confidence*100) if confidence < 1 else confidence}%)")
+            parts.append(f"Source: '{source}'")
+            if success_rate:
+                parts.append(f"Historical success rate: {int(success_rate*100)}%")
+            
+            return ". ".join(parts) + ". Forwarding to Mediator for risk assessment."
+        
+        if action == "record_solution":
+            return "💾 Recording this incident + resolution in history for future pattern matching."
+        
+        if action == "search_similar_incidents":
+            found = r.get("similar_incidents_found", 0)
+            return f"🔎 Searched incident history. Found {found} similar past incidents to analyze for patterns."
 
+    # ── Mediator Agent ─────────────────────────────────────────────────────
     if agent == "mediator":
         if action == "produce_recommendation":
-            verdict = r.get("verdict", "?")
-            safety = r.get("safety_score", "?")
+            if status == "failed":
+                return f"❌ Risk assessment failed: {error or 'unknown'}."
+            
+            verdict = r.get("verdict", "unknown")
+            safety = r.get("safety_score", 0)
             blast = r.get("blast_radius", {})
-            affected = blast.get("total_affected", 0) if isinstance(blast, dict) else blast
-            proposed = r.get("proposed_action", "?")
-            return f"Risk assessment complete. Verdict: {verdict} (safety score: {safety}). Blast radius: {affected} downstream services. Proposed action: {proposed}. Awaiting human approval."
+            affected = blast.get("total_affected", 0) if isinstance(blast, dict) else (blast if isinstance(blast, int) else 0)
+            proposed = r.get("proposed_action", "unknown")
+            risk_level = r.get("risk_level", "")
+            
+            emoji = "✅" if verdict in ("approve", "approved") else "⚠️" if verdict == "conditional" else "❌"
+            
+            parts = [f"{emoji} Risk assessment: {verdict.upper()}"]
+            parts.append(f"Safety score: {int(safety*100) if safety < 1 else safety}%")
+            if affected:
+                parts.append(f"Blast radius: {affected} downstream services")
+            if risk_level:
+                parts.append(f"Risk level: {risk_level}")
+            parts.append(f"Proposed action: {proposed}")
+            
+            if verdict in ("approve", "approved"):
+                parts.append("→ Queued for human approval")
+            
+            return ". ".join(parts)
+        
         if action == "check_guardrails":
-            return "Running safety guardrails: checking blast radius, change freeze windows, rollback safety scores, and deployment velocity limits."
+            if status == "failed":
+                return f"🛑 Guardrail check failed: {error or 'blocked by safety policy'}."
+            
+            checks = r.get("guardrail_results", [])
+            passed = sum(1 for c in checks if c.get("status") == "passed") if checks else 0
+            total = len(checks) if checks else 0
+            
+            return f"🛡️ Guardrail check: {passed}/{total} passed. Checking blast radius, change freeze windows, rollback safety, deployment velocity…"
+        
         if action == "analyze_blast_radius":
-            return "Analyzing service dependency graph to determine how many downstream services would be affected by remediation."
-        if action in ("rollback", "scale_up", "restart", "config_change"):
-            if status == "success" and r:
-                msg = r.get("message", "Action completed")
-                return f"Remediation executed: {msg}"
-            return f"Pending human approval for {action} action."
+            total = r.get("total_blast_radius", 0)
+            risk = r.get("risk_level", "unknown")
+            service = r.get("service_name", "")
+            
+            return f"💥 Blast radius for {service or 'target'}: {total} downstream services affected. Risk level: {risk}."
 
+    # ── Executor Agent ─────────────────────────────────────────────────────
     if agent == "executor":
-        if status == "success" and r:
-            msg = r.get("message", "Action completed")
-            return f"Executing approved remediation: {msg}"
-        return f"Preparing to execute {action} action on target service."
+        if action == "get_pending_approvals":
+            count = r.get("pending_count", 0)
+            return f"📋 {count} actions awaiting human approval."
+        
+        if action == "approve_action":
+            if status == "failed":
+                return f"❌ Execution failed: {error or 'unknown error'}."
+            
+            exec_result = r.get("execution_result", {})
+            action_type = exec_result.get("action", d.get("action_type", "unknown"))
+            service = exec_result.get("service", d.get("service_name", ""))
+            msg = exec_result.get("message", "")
+            
+            return f"✅ Executed **{action_type}** on {service or 'target'}. {msg}"
+        
+        if action == "reject_action":
+            reason = r.get("reason", d.get("reason", ""))
+            return f"🚫 Action rejected. Reason: {reason or 'operator decision'}"
+        
+        if action in ("rollback", "scale", "restart", "config_change"):
+            if status == "pending":
+                return f"⏳ **{action.replace('_', ' ').title()}** action pending human approval. Awaiting operator confirmation in Approvals panel."
+            if status == "success":
+                msg = r.get("message", "Action completed successfully")
+                return f"✅ {msg}"
+            if status == "failed":
+                return f"❌ {action.replace('_', ' ').title()} failed: {error or 'execution error'}"
+            return f"⚙️ Preparing {action.replace('_', ' ')} action…"
 
-    # Fallback
+    # ── Fallback ───────────────────────────────────────────────────────────
+    if status == "pending":
+        return f"⏳ {action.replace('_', ' ').title()} action pending approval…"
     if status == "failed" and error:
-        return f"Action {action} failed: {error}"
+        return f"❌ {action} failed: {error}"
     if status == "success":
-        return f"Completed {action} successfully."
-    return f"Processing {action}…"
+        return f"✅ Completed {action.replace('_', ' ')} successfully."
+    return f"⚙️ Processing {action.replace('_', ' ')}…"
 
 
 @app.route("/api/cleanup", methods=["POST"])

@@ -198,15 +198,27 @@
             padding: 20px;
             transition: all 0.3s;
             cursor: default;
+            position: relative;
+        }
+        .chaos-card.disabled {
+            opacity: 0.6;
+            background: var(--bg-elevated);
         }
         .chaos-card:hover {
             border-color: var(--accent-red);
             box-shadow: 0 0 20px rgba(239, 68, 68, 0.1);
         }
+        .chaos-card.disabled:hover {
+            border-color: var(--border);
+            box-shadow: none;
+        }
         .chaos-service {
             font-size: 15px;
             font-weight: 600;
             margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .chaos-desc {
             font-size: 12px;
@@ -369,6 +381,20 @@
         .badge-closed {
             background: rgba(100, 116, 139, 0.15);
             color: var(--text-muted);
+        }
+        .badge-coming-soon {
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            font-size: 10px;
+            padding: 2px 8px;
+        }
+        .badge-coming-soon {
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            font-size: 10px;
+            padding: 2px 8px;
         }
 
         .mono {
@@ -760,7 +786,7 @@
         <div class="section-header">
             <h2 class="section-title"><span class="icon">💣</span> Chaos Control Panel</h2>
             <div class="detect-bar">
-                <button class="btn btn-ghost btn-sm" onclick="openSettings()" title="Configure Archestra credentials">⚙️ Settings</button>
+                <button class="btn btn-ghost btn-sm" onclick="openSettings()" title="Configure Detective Agent credentials">🔑 API Keys</button>
                 <button class="btn btn-ghost btn-sm" onclick="stopAllChaos()">🛑 Stop All Chaos</button>
                 <button class="btn btn-primary btn-lg" onclick="triggerDetection()" id="detect-btn">
                     🔍 Run Sentinel Detection
@@ -777,20 +803,26 @@
                     <button class="btn btn-danger btn-sm" onclick="injectChaos('order', 'cascading_timeout')">⏱️ Cascade Timeout</button>
                 </div>
             </div>
-            <div class="chaos-card">
-                <div class="chaos-service">💳 Payment Service</div>
-                <div class="chaos-desc">Payment processing and validation API</div>
+            <div class="chaos-card disabled">
+                <div class="chaos-service">
+                    💳 Payment Service
+                    <span class="badge badge-coming-soon">COMING SOON</span>
+                </div>
+                <div class="chaos-desc">Payment processing API (disabled for budget optimization)</div>
                 <div class="chaos-modes">
-                    <button class="btn btn-danger btn-sm" onclick="injectChaos('payment', 'memory_leak')">🧠 Memory Leak</button>
-                    <button class="btn btn-danger btn-sm" onclick="injectChaos('payment', 'latency_spike')">🐌 Latency Spike</button>
+                    <button class="btn btn-danger btn-sm" disabled title="Service not deployed">🧠 Memory Leak</button>
+                    <button class="btn btn-danger btn-sm" disabled title="Service not deployed">🐌 Latency Spike</button>
                 </div>
             </div>
-            <div class="chaos-card">
-                <div class="chaos-service">📧 Notification Service</div>
-                <div class="chaos-desc">Email/SMS notification delivery API</div>
+            <div class="chaos-card disabled">
+                <div class="chaos-service">
+                    📧 Notification Service
+                    <span class="badge badge-coming-soon">COMING SOON</span>
+                </div>
+                <div class="chaos-desc">Notification delivery API (disabled for budget optimization)</div>
                 <div class="chaos-modes">
-                    <button class="btn btn-danger btn-sm" onclick="injectChaos('notification', 'cascade_failure')">🔥 Cascade Failure</button>
-                    <button class="btn btn-danger btn-sm" onclick="injectChaos('notification', 'latency_spike')">🐌 Latency Spike</button>
+                    <button class="btn btn-danger btn-sm" disabled title="Service not deployed">🔥 Cascade Failure</button>
+                    <button class="btn btn-danger btn-sm" disabled title="Service not deployed">🐌 Latency Spike</button>
                 </div>
             </div>
         </div>
@@ -865,25 +897,27 @@
 </main>
 
 <!-- Toast Container -->
-<!-- Settings Modal -->
+<!-- Settings Modal — Detective Agent Credentials -->
 <div class="modal-overlay" id="settings-modal" onclick="if(event.target===this) closeSettings()">
     <div class="modal">
-        <h2>⚙️ Archestra Credentials</h2>
+        <h2>🔑 Detective Agent Credentials</h2>
         <p>
-            Configure your Archestra Hub credentials to enable Sentinel detection.
-            These are stored in memory only — they won't persist across restarts.
-            <br><br>
-            <span id="config-status"></span>
+            Enable full root cause analysis by providing your API keys.
+            These are stored in memory only — credentials vanish on server restart.
         </p>
-        <label>Archestra Hub URL</label>
-        <input type="url" id="cfg-hub-url" placeholder="https://archestra-hub-xxx.us-central1.run.app">
-        <label>Archestra API Token</label>
-        <input type="password" id="cfg-token" placeholder="archestra_xxxxxxxxxxxx">
-        <label>Sentinel Agent ID (UUID)</label>
-        <input type="text" id="cfg-agent-id" placeholder="9a77407c-7ab1-481a-8155-8159e4859d4d">
+        <div id="detective-status" style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 10px 12px; border-radius: 6px; background: var(--bg-elevated); font-size: 13px;">
+            <span class="status-indicator missing" id="detective-indicator"></span>
+            <span id="detective-status-text">Detective: Disabled (needs Gemini key)</span>
+        </div>
+        <label>Gemini API Key <span style="color: var(--accent-red);">*</span></label>
+        <input type="password" id="cfg-gemini-key" placeholder="AIzaSy... (get free key at aistudio.google.com/apikey)">
+        <label>GitHub Personal Access Token <span style="color: var(--text-muted);">(optional)</span></label>
+        <input type="password" id="cfg-github-token" placeholder="ghp_... (github.com/settings/tokens, scope: repo read)">
+        <label>GitHub Repository <span style="color: var(--text-muted);">(optional)</span></label>
+        <input type="text" id="cfg-github-repo" placeholder="owner/repo (e.g., acme/my-service)">
         <div class="modal-actions">
             <button class="btn btn-ghost btn-sm" onclick="closeSettings()">Cancel</button>
-            <button class="btn btn-primary btn-sm" onclick="saveSettings()">💾 Save</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSettings()">💾 Save & Enable Detective</button>
         </div>
     </div>
 </div>
@@ -1313,15 +1347,23 @@
         try {
             const resp = await fetch(`${API}/api/config`);
             const cfg = await resp.json();
-            const status = document.getElementById('config-status');
-            const dot = (ok) => `<span class="status-indicator ${ok ? 'ok' : 'missing'}"></span>`;
-            status.innerHTML = `${dot(cfg.archestra_token_set)} Token: ${cfg.archestra_token_preview} &nbsp; ${dot(cfg.sentinel_agent_id !== 'not set')} Agent ID: ${cfg.sentinel_agent_id?.substring(0, 8) || 'not set'}…`;
-
-            // Pre-fill with current values
-            if (cfg.archestra_hub_url && cfg.archestra_hub_url !== 'not set')
-                document.getElementById('cfg-hub-url').placeholder = cfg.archestra_hub_url;
-            if (cfg.sentinel_agent_id && cfg.sentinel_agent_id !== 'not set')
-                document.getElementById('cfg-agent-id').value = cfg.sentinel_agent_id;
+            
+            // Update status indicator
+            const indicator = document.getElementById('detective-indicator');
+            const statusText = document.getElementById('detective-status-text');
+            
+            if (cfg.detective_enabled) {
+                indicator.className = 'status-indicator ok';
+                statusText.textContent = `Detective: ✅ Enabled (${cfg.gemini_api_key_preview})`;
+            } else {
+                indicator.className = 'status-indicator missing';
+                statusText.textContent = 'Detective: ❌ Disabled (needs Gemini key)';
+            }
+            
+            // Pre-fill GitHub repo if set
+            if (cfg.github_repo && cfg.github_repo !== 'not set') {
+                document.getElementById('cfg-github-repo').value = cfg.github_repo;
+            }
         } catch(e) { console.error('Config load failed:', e); }
     }
 
@@ -1331,17 +1373,19 @@
 
     async function saveSettings() {
         const payload = {};
-        const hubUrl = document.getElementById('cfg-hub-url').value.trim();
-        const token = document.getElementById('cfg-token').value.trim();
-        const agentId = document.getElementById('cfg-agent-id').value.trim();
-        if (hubUrl) payload.archestra_hub_url = hubUrl;
-        if (token) payload.archestra_token = token;
-        if (agentId) payload.sentinel_agent_id = agentId;
+        const geminiKey = document.getElementById('cfg-gemini-key').value.trim();
+        const githubToken = document.getElementById('cfg-github-token').value.trim();
+        const githubRepo = document.getElementById('cfg-github-repo').value.trim();
+        
+        if (geminiKey) payload.gemini_api_key = geminiKey;
+        if (githubToken) payload.github_token = githubToken;
+        if (githubRepo) payload.github_repo = githubRepo;
 
         if (Object.keys(payload).length === 0) {
-            showToast('No changes to save.', 'info');
+            showToast('Please enter at least a Gemini API key.', 'info');
             return;
         }
+        
         try {
             const resp = await fetch(`${API}/api/config`, {
                 method: 'POST',
@@ -1349,7 +1393,11 @@
                 body: JSON.stringify(payload)
             });
             const data = await resp.json();
-            showToast(`✅ Settings saved: ${data.keys.join(', ')}`, 'success');
+            if (data.detective_enabled) {
+                showToast('✅ Detective Agent enabled! Root cause analysis is now available.', 'success');
+            } else {
+                showToast(`Settings saved: ${data.keys.join(', ')}`, 'success');
+            }
             closeSettings();
         } catch(e) {
             showToast('❌ Failed to save settings: ' + e.message, 'error');
