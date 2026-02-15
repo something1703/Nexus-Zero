@@ -451,6 +451,23 @@ Provide a brief (3-4 sentences) risk assessment and your recommendation (proceed
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
+        # Create pending approval for Executor if human approval required
+        if requires_approval and verdict in ("RECOMMENDED", "CAUTION"):
+            create_audit_log(
+                agent_name="mediator",
+                action_type=proposed_action,
+                action_details={
+                    "service_name": service_name,
+                    "proposed_action": proposed_action,
+                    "proposed_action_details": details,
+                    "safety_score": round(safety_score, 2),
+                    "verdict": verdict,
+                    "blast_radius": blast_count
+                },
+                incident_id=incident_id,
+                status="pending"
+            )
+
         update_audit_log(audit["id"], status="success", result=result)
         logger.info(f"Recommendation: {verdict} (safety={safety_score})")
         return json.dumps(result, default=str)
