@@ -4,7 +4,9 @@ Nexus-Zero — Interactive Demo Dashboard Backend
 Flask API serving the judge-facing dashboard.
 
 Endpoints:
-  GET  /                              — Dashboard UI
+  GET  /                              — Landing page
+  GET  /dashboard                     — Interactive dashboard UI
+  GET  /how-it-works                  — How We Work deep-dive page
   GET  /api/health                    — Backend health check
   GET  /api/incidents                 — List recent incidents
   GET  /api/incidents/<id>            — Incident detail + audit trail
@@ -18,6 +20,8 @@ Endpoints:
   POST /api/detect                    — Trigger Sentinel detection
   GET  /api/services                  — List all registered services
   GET  /api/stats                     — Overall platform statistics
+  GET  /api/agent-activity            — Agent thinking/reasoning feed
+  POST /api/cleanup                   — Clean up stale records
 """
 
 import os
@@ -28,10 +32,12 @@ import time
 import threading
 from datetime import datetime, timezone, timedelta
 from functools import wraps
+from concurrent.futures import ThreadPoolExecutor
 
 import requests as http_requests
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 from flask import Flask, jsonify, request, render_template, abort
 
 # ---------------------------------------------------------------------------
@@ -82,28 +88,54 @@ logger = logging.getLogger("nexus-dashboard")
 # ---------------------------------------------------------------------------
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Log and return errors properly."""
+    logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
+    return jsonify({"error": str(e), "type": type(e).__name__}), 500
+
 # ---------------------------------------------------------------------------
-# Database Connection
+# Database Connection Pool
 # ---------------------------------------------------------------------------
 psycopg2.extras.register_uuid()
 
-def get_db_connection():
-    """Get a database connection (Cloud SQL socket or TCP)."""
-    params = {
-        "user": DB_USER,
-        "password": DB_PASSWORD,
-        "dbname": DB_NAME,
-    }
-    if DB_HOST:
-        params["host"] = DB_HOST
-        params["port"] = DB_PORT
-    else:
-        socket_path = os.path.join(CLOUD_SQL_SOCKET_DIR, INSTANCE_CONNECTION_NAME)
-        params["host"] = socket_path
+_db_pool = None
+_pool_lock = threading.Lock()
 
-    conn = psycopg2.connect(**params)
+def _get_pool():
+    """Lazily create a threadsafe connection pool."""
+    global _db_pool
+    if _db_pool is None:
+        with _pool_lock:
+            if _db_pool is None:
+                params = {
+                    "user": DB_USER,
+                    "password": DB_PASSWORD,
+                    "dbname": DB_NAME,
+                }
+                if DB_HOST:
+                    params["host"] = DB_HOST
+                    params["port"] = DB_PORT
+                else:
+                    socket_path = os.path.join(CLOUD_SQL_SOCKET_DIR, INSTANCE_CONNECTION_NAME)
+                    params["host"] = socket_path
+                _db_pool = psycopg2.pool.ThreadedConnectionPool(1, 10, **params)
+    return _db_pool
+
+
+def get_db_connection():
+    """Get a pooled database connection."""
+    conn = _get_pool().getconn()
     conn.autocommit = True
     return conn
+
+
+def put_db_connection(conn):
+    """Return connection to pool."""
+    try:
+        _get_pool().putconn(conn)
+    except Exception:
+        pass
 
 
 def query_db(sql, params=None, one=False):
@@ -116,7 +148,7 @@ def query_db(sql, params=None, one=False):
         cur.close()
         return dict(rows[0]) if one and rows else [dict(r) for r in rows]
     finally:
-        conn.close()
+        put_db_connection(conn)
 
 
 def execute_db(sql, params=None):
@@ -133,7 +165,7 @@ def execute_db(sql, params=None):
         finally:
             cur.close()
     finally:
-        conn.close()
+        put_db_connection(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -170,12 +202,24 @@ def serialize(obj):
 
 
 # ---------------------------------------------------------------------------
-# API Routes — Dashboard
+# Page Routes
 # ---------------------------------------------------------------------------
 @app.route("/")
+def landing():
+    """Serve the landing page."""
+    return render_template("index.html")
+
+
+@app.route("/dashboard")
 def dashboard():
-    """Serve the main dashboard page."""
+    """Serve the interactive dashboard."""
     return render_template("dashboard.html")
+
+
+@app.route("/how-it-works")
+def how_it_works():
+    """Serve the How We Work page."""
+    return render_template("how-it-works.html")
 
 
 @app.route("/api/health")
@@ -194,6 +238,52 @@ def health_check():
         "region": GCP_REGION,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
+
+
+# ---------------------------------------------------------------------------
+# API Routes — Runtime Configuration (Live Demo Credentials)
+# ---------------------------------------------------------------------------
+# In-memory overrides so judges can paste their own Archestra credentials
+# directly from the dashboard settings panel without redeploying.
+_runtime_config = {}
+_config_lock = threading.Lock()
+
+
+def _get_config(key, env_fallback):
+    """Return runtime override if set, else fall back to env var."""
+    with _config_lock:
+        val = _runtime_config.get(key)
+    return val if val else globals().get(env_fallback, os.environ.get(env_fallback, ""))
+
+
+@app.route("/api/config", methods=["GET"])
+def get_config():
+    """Return current credential configuration status (redacted)."""
+    archestra_token = _get_config("ARCHESTRA_TOKEN", "ARCHESTRA_TOKEN")
+    sentinel_id = _get_config("SENTINEL_AGENT_ID", "SENTINEL_AGENT_ID")
+    hub_url = _get_config("ARCHESTRA_HUB_URL", "ARCHESTRA_HUB_URL")
+    return jsonify({
+        "archestra_token_set": bool(archestra_token),
+        "archestra_token_preview": f"{archestra_token[:12]}…" if archestra_token and len(archestra_token) > 12 else ("set" if archestra_token else "not set"),
+        "sentinel_agent_id": sentinel_id or "not set",
+        "archestra_hub_url": hub_url or "not set",
+    })
+
+
+@app.route("/api/config", methods=["POST"])
+def update_config():
+    """Update runtime credentials for the live demo.
+    Accepts: archestra_token, sentinel_agent_id, archestra_hub_url
+    """
+    data = request.get_json(force=True)
+    updated = []
+    with _config_lock:
+        for key in ("ARCHESTRA_TOKEN", "SENTINEL_AGENT_ID", "ARCHESTRA_HUB_URL"):
+            val = data.get(key.lower()) or data.get(key)
+            if val and val.strip():
+                _runtime_config[key] = val.strip()
+                updated.append(key)
+    return jsonify({"status": "updated", "keys": updated})
 
 
 # ---------------------------------------------------------------------------
@@ -316,9 +406,8 @@ def list_approvals():
         FROM audit_logs al
         JOIN incidents i ON i.id = al.incident_id
         WHERE al.status = 'pending'
-          AND al.action_type != 'produce_recommendation'
-          AND al.action_type != 'detect_anomalies'
-          AND al.action_type != 'acknowledge_incident'
+          AND al.incident_id IS NOT NULL
+          AND al.action_type IN ('rollback', 'scale_up', 'restart', 'config_change')
         ORDER BY al.created_at DESC
         """
     )
@@ -375,33 +464,36 @@ def approve_action(approval_id):
     result["approved_by"] = approved_by
     result["approved_at"] = datetime.now(timezone.utc).isoformat()
 
-    # Update audit log
-    execute_db(
-        """
-        UPDATE audit_logs SET
-            status = 'success',
-            result = %s,
-            human_approved = TRUE,
-            approved_by = %s,
-            approved_at = NOW(),
-            completed_at = NOW()
-        WHERE id = %s
-        """,
-        (json.dumps(result, default=serialize), approved_by, approval_id)
-    )
-
-    # Resolve the incident
-    execute_db(
-        """
-        UPDATE incidents SET
-            status = 'resolved',
-            resolution_action = %s,
-            resolution_time_seconds = EXTRACT(EPOCH FROM (NOW() - created_at)),
-            updated_at = NOW()
-        WHERE id = %s
-        """,
-        (action_type, action["incident_id"])
-    )
+    # Atomic transaction: Update audit log AND resolve incident in one query
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        # Update audit log + resolve incident in one round-trip
+        cur.execute(
+            """
+            WITH updated_log AS (
+                UPDATE audit_logs SET
+                    status = 'success',
+                    result = %s,
+                    human_approved = TRUE,
+                    approved_by = %s,
+                    approved_at = NOW(),
+                    completed_at = NOW()
+                WHERE id = %s
+            )
+            UPDATE incidents SET
+                status = 'resolved',
+                resolution_action = %s,
+                resolution_time_seconds = EXTRACT(EPOCH FROM (NOW() - created_at)),
+                updated_at = NOW()
+            WHERE id = %s
+            """,
+            (json.dumps(result, default=serialize), approved_by, approval_id,
+             action_type, action["incident_id"])
+        )
+        cur.close()
+    finally:
+        put_db_connection(conn)
 
     return jsonify({
         "status": "approved_and_executed",
@@ -512,27 +604,22 @@ def inject_chaos():
             timeout=10
         )
 
-        # Send burst of requests to generate errors
-        burst_results = {"success": 0, "errors": 0}
-
+        # Send burst of requests in parallel to generate errors quickly
         def send_burst():
-            for _ in range(30):
+            def _hit(_i):
                 try:
-                    r = http_requests.post(
+                    http_requests.post(
                         f"{service_url}{service['endpoint']}",
                         json={"customer": "chaos-demo", "amount": 99.99},
-                        timeout=15
+                        timeout=5
                     )
-                    if r.status_code < 300:
-                        burst_results["success"] += 1
-                    else:
-                        burst_results["errors"] += 1
                 except Exception:
-                    burst_results["errors"] += 1
+                    pass
+            with ThreadPoolExecutor(max_workers=10) as pool:
+                pool.map(_hit, range(30))
 
         # Run burst in background so response is fast
-        burst_thread = threading.Thread(target=send_burst, daemon=True)
-        burst_thread.start()
+        threading.Thread(target=send_burst, daemon=True).start()
 
         return jsonify({
             "status": "chaos_injected",
@@ -592,47 +679,56 @@ def trigger_detection():
     """Trigger Sentinel agent to detect anomalies via Archestra A2A API."""
     time_window = request.json.get("time_window_minutes", 5) if request.is_json else 5
 
-    if not ARCHESTRA_TOKEN:
+    token = _get_config("ARCHESTRA_TOKEN", "ARCHESTRA_TOKEN")
+    agent_id = _get_config("SENTINEL_AGENT_ID", "SENTINEL_AGENT_ID")
+    hub_url = _get_config("ARCHESTRA_HUB_URL", "ARCHESTRA_HUB_URL")
+
+    if not token:
         return jsonify({
             "error": "Archestra token not configured",
-            "hint": "Set ARCHESTRA_TOKEN environment variable"
+            "hint": "Open ⚙️ Settings on the dashboard to set your Archestra credentials, or set ARCHESTRA_TOKEN env var."
         }), 500
 
-    try:
-        # Call Archestra A2A endpoint to trigger Sentinel
-        resp = http_requests.post(
-            f"{ARCHESTRA_HUB_URL}/v1/a2a/{SENTINEL_AGENT_ID}",
-            headers={
-                "Authorization": f"Bearer {ARCHESTRA_TOKEN}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "message/send",
-                "params": {
-                    "message": {
-                        "parts": [{
-                            "kind": "text",
-                            "text": f"Detect anomalies in the last {time_window} minutes and process all incidents through the full pipeline"
-                        }]
+    if not agent_id:
+        return jsonify({
+            "error": "Sentinel Agent ID not configured",
+            "hint": "Open ⚙️ Settings on the dashboard to set your Sentinel Agent ID."
+        }), 500
+
+    # Fire detection in background so the dashboard responds instantly
+    def _run_detection(tw, _token, _agent_id, _hub_url):
+        try:
+            http_requests.post(
+                f"{_hub_url}/v1/a2a/{_agent_id}",
+                headers={
+                    "Authorization": f"Bearer {_token}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "message/send",
+                    "params": {
+                        "message": {
+                            "parts": [{
+                                "kind": "text",
+                                "text": f"Detect anomalies in the last {tw} minutes and process all incidents through the full pipeline"
+                            }]
+                        }
                     }
-                }
-            },
-            timeout=120
-        )
+                },
+                timeout=120
+            )
+            logger.info("Sentinel detection completed")
+        except Exception as e:
+            logger.error(f"Sentinel detection failed: {e}")
 
-        return jsonify({
-            "status": "detection_triggered",
-            "sentinel_response": resp.json() if resp.ok else resp.text,
-            "message": "Sentinel agent is scanning for anomalies. Check incidents list for results."
-        })
+    threading.Thread(target=_run_detection, args=(time_window, token, agent_id, hub_url), daemon=True).start()
 
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": f"Failed to trigger Sentinel: {str(e)}"
-        }), 500
+    return jsonify({
+        "status": "detection_triggered",
+        "message": "Sentinel agent dispatched. Watch the Agent Thinking panel for real-time updates."
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -657,43 +753,32 @@ def list_services():
 
 @app.route("/api/stats")
 def platform_stats():
-    """Get overall platform statistics."""
-    stats = {}
-
-    # Total incidents
-    row = query_db("SELECT COUNT(*) as total FROM incidents", one=True)
-    stats["total_incidents"] = row["total"] if row else 0
-
-    # Active incidents
-    row = query_db("SELECT COUNT(*) as total FROM incidents WHERE status IN ('open', 'investigating')", one=True)
-    stats["active_incidents"] = row["total"] if row else 0
-
-    # Resolved incidents
-    row = query_db("SELECT COUNT(*) as total FROM incidents WHERE status = 'resolved'", one=True)
-    stats["resolved_incidents"] = row["total"] if row else 0
-
-    # Average resolution time
+    """Get overall platform statistics — single query."""
+    # One round-trip for all counters instead of 7 separate queries
     row = query_db(
-        "SELECT AVG(resolution_time_seconds) as avg_time FROM incidents WHERE resolution_time_seconds IS NOT NULL",
+        """
+        SELECT
+            (SELECT COUNT(*) FROM incidents) AS total_incidents,
+            (SELECT COUNT(*) FROM incidents WHERE status IN ('open', 'investigating')) AS active_incidents,
+            (SELECT COUNT(*) FROM incidents WHERE status = 'resolved') AS resolved_incidents,
+            (SELECT COALESCE(ROUND(AVG(resolution_time_seconds)::numeric, 1), 0) FROM incidents WHERE resolution_time_seconds IS NOT NULL) AS avg_resolution_time_seconds,
+            (SELECT COUNT(*) FROM audit_logs WHERE status = 'pending' AND incident_id IS NOT NULL AND action_type IN ('rollback', 'scale_up', 'restart', 'config_change')) AS pending_approvals,
+            (SELECT COUNT(*) FROM audit_logs) AS total_agent_actions
+        """,
         one=True
     )
-    stats["avg_resolution_time_seconds"] = round(row["avg_time"] or 0, 1) if row else 0
 
-    # Pending approvals
-    row = query_db(
-        """SELECT COUNT(*) as total FROM audit_logs
-        WHERE status = 'pending'
-        AND action_type NOT IN ('produce_recommendation', 'detect_anomalies', 'acknowledge_incident')""",
-        one=True
-    )
-    stats["pending_approvals"] = row["total"] if row else 0
+    stats = {
+        "total_incidents": row["total_incidents"],
+        "active_incidents": row["active_incidents"],
+        "resolved_incidents": row["resolved_incidents"],
+        "avg_resolution_time_seconds": float(row["avg_resolution_time_seconds"]),
+        "pending_approvals": row["pending_approvals"],
+        "total_agent_actions": row["total_agent_actions"],
+    }
 
-    # Total agent actions
-    row = query_db("SELECT COUNT(*) as total FROM audit_logs", one=True)
-    stats["total_agent_actions"] = row["total"] if row else 0
-
-    # Actions by agent
-    agent_stats = query_db(
+    # Agent breakdown (small table, very fast)
+    stats["agent_breakdown"] = query_db(
         """
         SELECT agent_name, COUNT(*) as actions,
                COUNT(*) FILTER (WHERE status = 'success') as successes,
@@ -703,10 +788,9 @@ def platform_stats():
         ORDER BY actions DESC
         """
     )
-    stats["agent_breakdown"] = agent_stats
 
     # Recent activity (last 10 actions)
-    recent = query_db(
+    stats["recent_activity"] = query_db(
         """
         SELECT al.agent_name, al.action_type, al.status, al.created_at,
                i.service_name, i.severity
@@ -716,9 +800,275 @@ def platform_stats():
         LIMIT 10
         """
     )
-    stats["recent_activity"] = recent
 
     return jsonify(stats), 200, {"Content-Type": "application/json"}
+
+
+# ---------------------------------------------------------------------------
+# API Routes — Agent Activity Feed (Explainability)
+# ---------------------------------------------------------------------------
+@app.route("/api/agent-activity")
+def agent_activity():
+    """Get recent agent activity with thinking/reasoning details for explainability."""
+    limit = request.args.get("limit", 20, type=int)
+    incident_id = request.args.get("incident_id", None)
+
+    sql = """
+        SELECT al.id, al.agent_name, al.action_type, al.status,
+               al.action_details, al.result, al.error_message,
+               al.created_at, al.completed_at, al.human_approved, al.approved_by,
+               i.service_name, i.severity, i.error_signature, i.id as incident_id
+        FROM audit_logs al
+        LEFT JOIN incidents i ON i.id = al.incident_id
+    """
+    params = []
+    if incident_id:
+        sql += " WHERE al.incident_id = %s"
+        params.append(incident_id)
+    sql += " ORDER BY al.created_at DESC LIMIT %s"
+    params.append(limit)
+
+    logs = query_db(sql, params)
+
+    activities = []
+    for log in logs:
+        agent = log["agent_name"]
+        action = log["action_type"]
+        result = log.get("result")
+        details = log.get("action_details")
+
+        # Parse JSON fields
+        if isinstance(result, str):
+            try: result = json.loads(result)
+            except: pass
+        if isinstance(details, str):
+            try: details = json.loads(details)
+            except: pass
+
+        # Generate human-readable thinking summary
+        thinking = _generate_agent_thinking(agent, action, log["status"], result, details, log.get("error_message"))
+
+        activities.append({
+            "id": log["id"],
+            "agent": agent,
+            "action": action,
+            "status": log["status"],
+            "service": log.get("service_name"),
+            "severity": log.get("severity"),
+            "incident_id": log.get("incident_id"),
+            "thinking": thinking,
+            "timestamp": log["created_at"],
+            "completed": log.get("completed_at"),
+            "human_approved": log.get("human_approved"),
+        })
+
+    return jsonify({"activities": activities, "count": len(activities)})
+
+
+def _generate_agent_thinking(agent, action, status, result, details, error):
+    """Generate human-readable reasoning for what the agent is doing."""
+    r = result or {}
+    d = details or {}
+
+    if agent == "sentinel":
+        if action == "detect_anomalies":
+            total = r.get("total_errors", r.get("anomalies_found", "?"))
+            svcs = r.get("services_affected", "?")
+            return f"Scanning GCP Cloud Logging for anomalies… Found {total} errors across {svcs} services. Creating incidents for investigation."
+        if action == "acknowledge_incident":
+            return f"New incident detected. Acknowledging and dispatching to Detective + Historian for parallel investigation."
+
+    if agent == "detective":
+        if action == "investigate_root_cause":
+            if status == "failed":
+                return f"Attempted root cause analysis by querying service metrics and logs. Investigation encountered an error: {error or 'unknown'}. Falling back to Historian recommendations."
+            return f"Analyzing service behavior patterns, error correlations, and deployment history to identify root cause."
+        if action == "analyze_logs":
+            if status == "failed":
+                return f"Queried GCP Cloud Logging for recent error patterns. Log analysis failed: {error or 'unknown'}. Historian will provide fallback solutions."
+            window = d.get("time_window", 30)
+            return f"Pulling last {window} minutes of structured logs from Cloud Logging. Analyzing error frequency, stack traces, and correlation patterns."
+
+    if agent == "historian":
+        if action == "get_recommended_solutions":
+            sols = r.get("total_solutions", "?")
+            top = r.get("top_recommendation", {})
+            top_action = top.get("action_type", "?")
+            confidence = top.get("confidence", "?")
+            source = top.get("source_name", "playbook")
+            return f"Searched playbook database and past incident history. Found {sols} solutions. Top recommendation: {top_action} (confidence: {confidence}) from '{source}'."
+
+    if agent == "mediator":
+        if action == "produce_recommendation":
+            verdict = r.get("verdict", "?")
+            safety = r.get("safety_score", "?")
+            blast = r.get("blast_radius", {})
+            affected = blast.get("total_affected", 0) if isinstance(blast, dict) else blast
+            proposed = r.get("proposed_action", "?")
+            return f"Risk assessment complete. Verdict: {verdict} (safety score: {safety}). Blast radius: {affected} downstream services. Proposed action: {proposed}. Awaiting human approval."
+        if action == "check_guardrails":
+            return "Running safety guardrails: checking blast radius, change freeze windows, rollback safety scores, and deployment velocity limits."
+        if action == "analyze_blast_radius":
+            return "Analyzing service dependency graph to determine how many downstream services would be affected by remediation."
+        if action in ("rollback", "scale_up", "restart", "config_change"):
+            if status == "success" and r:
+                msg = r.get("message", "Action completed")
+                return f"Remediation executed: {msg}"
+            return f"Pending human approval for {action} action."
+
+    if agent == "executor":
+        if status == "success" and r:
+            msg = r.get("message", "Action completed")
+            return f"Executing approved remediation: {msg}"
+        return f"Preparing to execute {action} action on target service."
+
+    # Fallback
+    if status == "failed" and error:
+        return f"Action {action} failed: {error}"
+    if status == "success":
+        return f"Completed {action} successfully."
+    return f"Processing {action}…"
+
+
+@app.route("/api/cleanup", methods=["POST"])
+def cleanup_stale_data():
+    """Clean up stale/orphaned records."""
+    # Remove orphaned pending records with no incident
+    execute_db(
+        "DELETE FROM audit_logs WHERE status = 'pending' AND incident_id IS NULL"
+    )
+    # Mark very old investigating incidents as closed
+    execute_db(
+        """
+        UPDATE incidents SET status = 'closed', updated_at = NOW()
+        WHERE status IN ('open', 'investigating')
+        AND created_at < NOW() - INTERVAL '2 hours'
+        """
+    )
+    return jsonify({"status": "cleaned", "message": "Stale records removed"})
+
+
+# ---------------------------------------------------------------------------
+# API Routes — Combined Dashboard Data (single request)
+# ---------------------------------------------------------------------------
+@app.route("/api/dashboard-data")
+def dashboard_data():
+    """Single endpoint returning all dashboard data in one shot.
+    Replaces 4 parallel API calls with 1 request + 1 DB connection.
+    """
+    limit_incidents = request.args.get("limit", 30, type=int)
+    status_filter = request.args.get("status", None)
+    limit_activity = request.args.get("activity_limit", 15, type=int)
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # 1) Stats — single query with sub-selects
+        cur.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM incidents) AS total_incidents,
+                (SELECT COUNT(*) FROM incidents WHERE status IN ('open', 'investigating')) AS active_incidents,
+                (SELECT COUNT(*) FROM incidents WHERE status = 'resolved') AS resolved_incidents,
+                (SELECT COALESCE(ROUND(AVG(resolution_time_seconds)::numeric, 1), 0)
+                 FROM incidents WHERE resolution_time_seconds IS NOT NULL) AS avg_resolution_time_seconds,
+                (SELECT COUNT(*) FROM audit_logs
+                 WHERE status = 'pending' AND incident_id IS NOT NULL
+                 AND action_type IN ('rollback','scale_up','restart','config_change')) AS pending_approvals,
+                (SELECT COUNT(*) FROM audit_logs) AS total_agent_actions
+        """)
+        stats_row = dict(cur.fetchone())
+        stats_row["avg_resolution_time_seconds"] = float(stats_row["avg_resolution_time_seconds"])
+
+        # 2) Incidents
+        if status_filter:
+            cur.execute("""
+                SELECT id, service_name, severity, status, error_count,
+                       error_signature, error_message, created_at, updated_at,
+                       resolution_action, resolution_time_seconds
+                FROM incidents WHERE status = %s
+                ORDER BY created_at DESC LIMIT %s
+            """, (status_filter, limit_incidents))
+        else:
+            cur.execute("""
+                SELECT id, service_name, severity, status, error_count,
+                       error_signature, error_message, created_at, updated_at,
+                       resolution_action, resolution_time_seconds
+                FROM incidents
+                ORDER BY created_at DESC LIMIT %s
+            """, (limit_incidents,))
+        incidents = [dict(r) for r in cur.fetchall()]
+
+        # 3) Pending approvals
+        cur.execute("""
+            SELECT al.id, al.incident_id, al.agent_name, al.action_type,
+                   al.action_details, al.created_at,
+                   i.service_name, i.severity, i.error_signature
+            FROM audit_logs al
+            JOIN incidents i ON i.id = al.incident_id
+            WHERE al.status = 'pending'
+              AND al.incident_id IS NOT NULL
+              AND al.action_type IN ('rollback', 'scale_up', 'restart', 'config_change')
+            ORDER BY al.created_at DESC
+        """)
+        approvals = [dict(r) for r in cur.fetchall()]
+        for a in approvals:
+            if isinstance(a.get("action_details"), str):
+                try:
+                    a["action_details"] = json.loads(a["action_details"])
+                except Exception:
+                    pass
+
+        # 4) Agent activity
+        cur.execute("""
+            SELECT al.id, al.agent_name, al.action_type, al.status,
+                   al.action_details, al.result, al.error_message,
+                   al.created_at, al.completed_at, al.human_approved, al.approved_by,
+                   i.service_name, i.severity, i.error_signature, i.id as incident_id
+            FROM audit_logs al
+            LEFT JOIN incidents i ON i.id = al.incident_id
+            ORDER BY al.created_at DESC LIMIT %s
+        """, (limit_activity,))
+        raw_logs = [dict(r) for r in cur.fetchall()]
+
+        cur.close()
+    finally:
+        put_db_connection(conn)
+
+    # Process agent activity (in Python, no extra DB calls)
+    activities = []
+    for log in raw_logs:
+        agent = log["agent_name"]
+        action = log["action_type"]
+        result = log.get("result")
+        details = log.get("action_details")
+        if isinstance(result, str):
+            try: result = json.loads(result)
+            except: pass
+        if isinstance(details, str):
+            try: details = json.loads(details)
+            except: pass
+        thinking = _generate_agent_thinking(agent, action, log["status"], result, details, log.get("error_message"))
+        activities.append({
+            "id": log["id"],
+            "agent": agent,
+            "action": action,
+            "status": log["status"],
+            "service": log.get("service_name"),
+            "severity": log.get("severity"),
+            "incident_id": log.get("incident_id"),
+            "thinking": thinking,
+            "timestamp": log["created_at"],
+            "completed": log.get("completed_at"),
+            "human_approved": log.get("human_approved"),
+        })
+
+    return jsonify({
+        "stats": stats_row,
+        "incidents": incidents,
+        "approvals": {"count": len(approvals), "actions": approvals},
+        "activities": {"count": len(activities), "activities": activities},
+    }), 200, {"Content-Type": "application/json"}
 
 
 # ---------------------------------------------------------------------------

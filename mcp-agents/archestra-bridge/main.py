@@ -23,13 +23,18 @@ from mcp.client.sse import sse_client
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("archestra-bridge")
 
-# ── Agent SSE endpoints ──────────────────────────────────────────────────────
-AGENTS = {
+# ── Agent SSE endpoints (configurable via env for BYO Cloud deployments) ─────
+_DEFAULT_AGENTS = {
     "sentinel": "https://nexus-sentinel-agent-833613368271.us-central1.run.app",
     "detective": "https://nexus-detective-agent-833613368271.us-central1.run.app",
     "historian": "https://nexus-historian-agent-833613368271.us-central1.run.app",
     "mediator": "https://nexus-mediator-agent-833613368271.us-central1.run.app",
     "executor": "https://nexus-executor-agent-833613368271.us-central1.run.app",
+}
+
+AGENTS = {
+    name: os.environ.get(f"{name.upper()}_AGENT_URL", default_url)
+    for name, default_url in _DEFAULT_AGENTS.items()
 }
 
 # ── Tool cache ────────────────────────────────────────────────────────────────

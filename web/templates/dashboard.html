@@ -535,6 +535,44 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        /* ---- Settings Modal ---- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); z-index: 2000;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 16px; padding: 32px; width: 480px; max-width: 90vw;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+        }
+        .modal h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+        .modal p { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5; }
+        .modal label {
+            display: block; font-size: 12px; font-weight: 600;
+            color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .modal input {
+            width: 100%; padding: 10px 12px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--bg-card);
+            color: var(--text-primary); font-size: 13px;
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 16px; outline: none;
+        }
+        .modal input:focus { border-color: var(--accent-blue); }
+        .modal input::placeholder { color: var(--text-muted); }
+        .modal-actions {
+            display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;
+        }
+        .modal .status-indicator {
+            display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+            margin-right: 6px;
+        }
+        .modal .status-indicator.ok { background: var(--accent-green); }
+        .modal .status-indicator.missing { background: var(--accent-red); }
+
         /* ---- Empty State ---- */
         .empty-state {
             text-align: center;
@@ -551,6 +589,95 @@
             display: inline-flex;
             align-items: center;
             gap: 4px;
+        }
+
+        /* ---- Agent Thinking Panel ---- */
+        .agent-thinking {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            max-height: 420px;
+            overflow-y: auto;
+        }
+        .agent-thinking::-webkit-scrollbar {
+            width: 6px;
+        }
+        .agent-thinking::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+        .agent-thinking::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+        .thought-item {
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(45, 55, 72, 0.4);
+            transition: background 0.15s;
+            cursor: pointer;
+        }
+        .thought-item:hover {
+            background: var(--bg-card-hover);
+        }
+        .thought-item:last-child {
+            border-bottom: none;
+        }
+        .thought-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .thought-agent {
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .thought-agent.sentinel { color: #f59e0b; }
+        .thought-agent.detective { color: #3b82f6; }
+        .thought-agent.historian { color: #8b5cf6; }
+        .thought-agent.mediator { color: #22d3ee; }
+        .thought-agent.executor { color: #10b981; }
+        .thought-time {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .thought-action {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        .thought-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+        .thought-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .thought-status.success { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+        .thought-status.failed { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+        .thought-status.pending { background: rgba(245,158,11,0.15); color: var(--accent-orange); }
+        .thought-service {
+            font-size: 11px;
+            color: var(--accent-cyan);
+            font-weight: 500;
+        }
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        @media (max-width: 1024px) {
+            .two-col { grid-template-columns: 1fr; }
         }
 
         /* ---- Responsive ---- */
@@ -570,9 +697,15 @@
 <header class="header">
     <div class="header-left">
         <div>
-            <div class="logo">NEXUS-ZERO</div>
+            <a href="/" style="text-decoration: none;">
+                <div class="logo">NEXUS-ZERO</div>
+            </a>
             <div class="logo-sub">Autonomous SRE Platform</div>
         </div>
+        <nav style="display: flex; gap: 16px; margin-left: 24px;">
+            <a href="/" style="color: var(--text-muted); text-decoration: none; font-size: 13px; font-weight: 500;">Home</a>
+            <a href="/how-it-works" style="color: var(--text-muted); text-decoration: none; font-size: 13px; font-weight: 500;">How We Work</a>
+        </nav>
     </div>
     <div class="header-status">
         <div class="status-badge">
@@ -627,6 +760,7 @@
         <div class="section-header">
             <h2 class="section-title"><span class="icon">💣</span> Chaos Control Panel</h2>
             <div class="detect-bar">
+                <button class="btn btn-ghost btn-sm" onclick="openSettings()" title="Configure Archestra credentials">⚙️ Settings</button>
                 <button class="btn btn-ghost btn-sm" onclick="stopAllChaos()">🛑 Stop All Chaos</button>
                 <button class="btn btn-primary btn-lg" onclick="triggerDetection()" id="detect-btn">
                     🔍 Run Sentinel Detection
@@ -662,12 +796,28 @@
         </div>
     </div>
 
-    <!-- Pending Approvals -->
-    <div class="section" id="approvals-section" style="display: none;">
-        <div class="section-header">
-            <h2 class="section-title"><span class="icon">🔒</span> Pending Approvals</h2>
+    <!-- Agent Thinking + Pending Approvals (two columns) -->
+    <div class="two-col">
+        <!-- Agent Thinking Panel -->
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title"><span class="icon">🧠</span> Agent Thinking</h2>
+                <span style="font-size: 11px; color: var(--text-muted);">Real-time agent reasoning</span>
+            </div>
+            <div class="agent-thinking" id="agent-thinking">
+                <div class="empty-state" style="padding: 32px;"><div class="icon">🤖</div>Agents idle. Inject chaos to see them think.</div>
+            </div>
         </div>
-        <div class="approval-list" id="approval-list"></div>
+
+        <!-- Pending Approvals -->
+        <div class="section" id="approvals-section">
+            <div class="section-header">
+                <h2 class="section-title"><span class="icon">🔒</span> Pending Approvals</h2>
+            </div>
+            <div class="approval-list" id="approval-list">
+                <div class="empty-state" style="padding: 32px;"><div class="icon">✅</div>No pending approvals right now.</div>
+            </div>
+        </div>
     </div>
 
     <!-- Incident Feed -->
@@ -715,6 +865,29 @@
 </main>
 
 <!-- Toast Container -->
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settings-modal" onclick="if(event.target===this) closeSettings()">
+    <div class="modal">
+        <h2>⚙️ Archestra Credentials</h2>
+        <p>
+            Configure your Archestra Hub credentials to enable Sentinel detection.
+            These are stored in memory only — they won't persist across restarts.
+            <br><br>
+            <span id="config-status"></span>
+        </p>
+        <label>Archestra Hub URL</label>
+        <input type="url" id="cfg-hub-url" placeholder="https://archestra-hub-xxx.us-central1.run.app">
+        <label>Archestra API Token</label>
+        <input type="password" id="cfg-token" placeholder="archestra_xxxxxxxxxxxx">
+        <label>Sentinel Agent ID (UUID)</label>
+        <input type="text" id="cfg-agent-id" placeholder="9a77407c-7ab1-481a-8155-8159e4859d4d">
+        <div class="modal-actions">
+            <button class="btn btn-ghost btn-sm" onclick="closeSettings()">Cancel</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSettings()">💾 Save</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast-container" id="toast-container"></div>
 
 <!-- ============================================ -->
@@ -725,42 +898,56 @@
     let currentFilter = 'all';
     let selectedIncident = null;
     let refreshInterval = null;
+    let isRefreshing = false;
+    let lastRefresh = 0;
 
     // ---- Initialization ----
     document.addEventListener('DOMContentLoaded', () => {
         refreshAll();
-        refreshInterval = setInterval(refreshAll, 3000);
+        refreshInterval = setInterval(refreshAll, 2000);
         startCountdown();
     });
 
     function startCountdown() {
-        let count = 3;
+        let count = 2;
         setInterval(() => {
-            count = count <= 0 ? 3 : count - 1;
+            count = count <= 0 ? 2 : count - 1;
             document.getElementById('refresh-countdown').textContent = count + 's';
         }, 1000);
     }
 
     // ---- Refresh All Data ----
-    async function refreshAll() {
+    async function refreshAll(force = false) {
+        // Debounce: prevent multiple refreshes within 500ms unless forced
+        const now = Date.now();
+        if (!force && isRefreshing) return;
+        if (!force && (now - lastRefresh < 500)) return;
+        
+        isRefreshing = true;
+        lastRefresh = now;
         try {
-            await Promise.all([
-                refreshStats(),
-                refreshIncidents(),
-                refreshApprovals(),
-            ]);
+            // Single combined request replaces 4 separate API calls
+            const statusParam = currentFilter !== 'all' ? `&status=${currentFilter}` : '';
+            const resp = await fetch(`${API}/api/dashboard-data?limit=30&activity_limit=15${statusParam}`);
+            const data = await resp.json();
+
+            applyStats(data.stats);
+            renderIncidents(data.incidents || []);
+            renderApprovals(data.approvals);
+            renderAgentThinking(data.activities);
+
             document.getElementById('db-status').className = 'status-dot';
             document.getElementById('agent-status').className = 'status-dot';
         } catch (e) {
             document.getElementById('db-status').className = 'status-dot error';
             console.error('Refresh failed:', e);
+        } finally {
+            isRefreshing = false;
         }
     }
 
     // ---- Stats ----
-    async function refreshStats() {
-        const resp = await fetch(`${API}/api/stats`);
-        const data = await resp.json();
+    function applyStats(data) {
         document.getElementById('stat-total').textContent = data.total_incidents || 0;
         document.getElementById('stat-active').textContent = data.active_incidents || 0;
         document.getElementById('stat-resolved').textContent = data.resolved_incidents || 0;
@@ -777,6 +964,12 @@
         } else {
             document.getElementById('stat-avg-time').textContent = '—';
         }
+    }
+
+    // Keep individual refreshers for post-approve/reject partial updates
+    async function refreshStats() {
+        const resp = await fetch(`${API}/api/stats`);
+        applyStats(await resp.json());
     }
 
     // ---- Incidents ----
@@ -886,18 +1079,13 @@
     }
 
     // ---- Approvals ----
-    async function refreshApprovals() {
-        const resp = await fetch(`${API}/api/approvals`);
-        const data = await resp.json();
-        const section = document.getElementById('approvals-section');
+    function renderApprovals(data) {
         const list = document.getElementById('approval-list');
-
         if (!data.count) {
-            section.style.display = 'none';
+            list.innerHTML = '<div class="empty-state" style="padding: 32px;"><div class="icon">✅</div>No pending approvals right now.</div>';
             return;
         }
 
-        section.style.display = 'block';
         list.innerHTML = data.actions.map(action => {
             const details = action.action_details || {};
             return `
@@ -924,7 +1112,68 @@
         }).join('');
     }
 
+    async function refreshApprovals() {
+        const resp = await fetch(`${API}/api/approvals`);
+        renderApprovals(await resp.json());
+    }
+
+    // ---- Agent Thinking ----
+    function renderAgentThinking(data) {
+        const panel = document.getElementById('agent-thinking');
+
+        if (!data || !data.count) {
+            panel.innerHTML = '<div class="empty-state" style="padding: 32px;"><div class="icon">🤖</div>Agents idle. Inject chaos to see them think.</div>';
+            return;
+        }
+
+        const agentEmojis = {
+            sentinel: '🛡️', detective: '🔍', historian: '📚',
+            mediator: '⚖️', executor: '🚀'
+        };
+
+        panel.innerHTML = data.activities.map(a => {
+            const emoji = agentEmojis[a.agent] || '🤖';
+            const statusClass = a.status === 'success' ? 'success' : a.status === 'failed' ? 'failed' : 'pending';
+            const incidentLink = a.incident_id ? `onclick="showDetail('${a.incident_id}')"` : '';
+            return `
+                <div class="thought-item" ${incidentLink}>
+                    <div class="thought-header">
+                        <span class="thought-agent ${a.agent}">${emoji} ${a.agent.toUpperCase()}</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="thought-status ${statusClass}">${a.status}</span>
+                            <span class="thought-time">${formatTime(a.timestamp)}</span>
+                        </div>
+                    </div>
+                    <div class="thought-action">${a.action} ${a.service ? '• <span class="thought-service">' + a.service + '</span>' : ''}</div>
+                    <div class="thought-text">${a.thinking}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function refreshAgentThinking() {
+        try {
+            const resp = await fetch(`${API}/api/agent-activity?limit=15`);
+            if (!resp.ok) { console.error('Agent activity fetch failed:', resp.status); return; }
+            renderAgentThinking(await resp.json());
+        } catch (e) {
+            console.error('Agent activity error:', e);
+        }
+    }
+
     async function approveAction(id) {
+        // Get the button element
+        const btn = event.target;
+        const originalContent = btn.innerHTML;
+        
+        // Disable button and show loading
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Executing...';
+        
+        // Optimistically remove from UI
+        const card = btn.closest('.approval-card');
+        if (card) card.style.opacity = '0.5';
+        
         try {
             const resp = await fetch(`${API}/api/approvals/${id}/approve`, {
                 method: 'POST',
@@ -932,23 +1181,47 @@
                 body: JSON.stringify({approved_by: 'judge'})
             });
             const data = await resp.json();
+            
+            // Remove card immediately for instant feedback
+            if (card) card.remove();
+            
             showToast(`✅ Action approved! ${data.action_type} on ${data.service} executed.`, 'success');
-            refreshAll();
+            
+            // Refresh everything from combined endpoint
+            setTimeout(() => refreshAll(true), 300);
         } catch(e) {
+            // Restore button on error
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+            if (card) card.style.opacity = '1';
             showToast('❌ Approval failed: ' + e.message, 'error');
         }
     }
 
     async function rejectAction(id) {
+        const btn = event.target;
+        const originalContent = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Rejecting...';
+        
+        const card = btn.closest('.approval-card');
+        if (card) card.style.opacity = '0.5';
+        
         try {
             await fetch(`${API}/api/approvals/${id}/reject`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({reason: 'Rejected by judge'})
             });
+            
+            if (card) card.remove();
             showToast('❌ Action rejected.', 'info');
-            refreshAll();
+            
+            setTimeout(() => refreshAll(true), 300);
         } catch(e) {
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+            if (card) card.style.opacity = '1';
             showToast('Rejection failed: ' + e.message, 'error');
         }
     }
@@ -977,8 +1250,8 @@
         } finally {
             btn.disabled = false;
             btn.innerHTML = btn.textContent;
-            // Force refresh
-            setTimeout(refreshAll, 2000);
+            // Force refresh after chaos injection
+            setTimeout(() => refreshAll(true), 2000);
         }
     }
 
@@ -1032,6 +1305,55 @@
         toast.textContent = message;
         container.appendChild(toast);
         setTimeout(() => toast.remove(), 5000);
+    }
+
+    // ---- Settings Modal ----
+    async function openSettings() {
+        document.getElementById('settings-modal').classList.add('active');
+        try {
+            const resp = await fetch(`${API}/api/config`);
+            const cfg = await resp.json();
+            const status = document.getElementById('config-status');
+            const dot = (ok) => `<span class="status-indicator ${ok ? 'ok' : 'missing'}"></span>`;
+            status.innerHTML = `${dot(cfg.archestra_token_set)} Token: ${cfg.archestra_token_preview} &nbsp; ${dot(cfg.sentinel_agent_id !== 'not set')} Agent ID: ${cfg.sentinel_agent_id?.substring(0, 8) || 'not set'}…`;
+
+            // Pre-fill with current values
+            if (cfg.archestra_hub_url && cfg.archestra_hub_url !== 'not set')
+                document.getElementById('cfg-hub-url').placeholder = cfg.archestra_hub_url;
+            if (cfg.sentinel_agent_id && cfg.sentinel_agent_id !== 'not set')
+                document.getElementById('cfg-agent-id').value = cfg.sentinel_agent_id;
+        } catch(e) { console.error('Config load failed:', e); }
+    }
+
+    function closeSettings() {
+        document.getElementById('settings-modal').classList.remove('active');
+    }
+
+    async function saveSettings() {
+        const payload = {};
+        const hubUrl = document.getElementById('cfg-hub-url').value.trim();
+        const token = document.getElementById('cfg-token').value.trim();
+        const agentId = document.getElementById('cfg-agent-id').value.trim();
+        if (hubUrl) payload.archestra_hub_url = hubUrl;
+        if (token) payload.archestra_token = token;
+        if (agentId) payload.sentinel_agent_id = agentId;
+
+        if (Object.keys(payload).length === 0) {
+            showToast('No changes to save.', 'info');
+            return;
+        }
+        try {
+            const resp = await fetch(`${API}/api/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json();
+            showToast(`✅ Settings saved: ${data.keys.join(', ')}`, 'success');
+            closeSettings();
+        } catch(e) {
+            showToast('❌ Failed to save settings: ' + e.message, 'error');
+        }
     }
 </script>
 

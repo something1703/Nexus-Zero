@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus-Zero — Autonomous SRE Incident Response</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* ================================================
+           NEXUS-ZERO — LANDING PAGE
+           ================================================ */
+        :root {
+            --bg-primary: #030712;
+            --bg-secondary: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #334155;
+            --border: #1e293b;
+            --border-glow: rgba(99, 179, 237, 0.3);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #22d3ee;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-orange: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --gradient-primary: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            --gradient-hero: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #22d3ee 100%);
+            --gradient-green: linear-gradient(135deg, #10b981, #22d3ee);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* ---- Animated background ---- */
+        .bg-grid {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                linear-gradient(rgba(59,130,246,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59,130,246,0.03) 1px, transparent 1px);
+            background-size: 64px 64px;
+            pointer-events: none; z-index: 0;
+        }
+        .bg-glow {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(ellipse 80% 60% at 50% -20%, rgba(59,130,246,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 60%, rgba(139,92,246,0.06) 0%, transparent 50%),
+                radial-gradient(ellipse 50% 30% at 20% 80%, rgba(34,211,238,0.04) 0%, transparent 50%);
+            pointer-events: none; z-index: 0;
+        }
+
+        /* ---- Nav ---- */
+        nav {
+            position: fixed; top: 0; left: 0; right: 0;
+            padding: 16px 48px;
+            display: flex; align-items: center; justify-content: space-between;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+            background: rgba(3,7,18,0.6);
+            border-bottom: 1px solid rgba(30,41,59,0.5);
+        }
+        .nav-brand {
+            font-size: 22px; font-weight: 800;
+            background: var(--gradient-hero);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+        .nav-links { display: flex; gap: 32px; align-items: center; }
+        .nav-links a {
+            color: var(--text-secondary); text-decoration: none;
+            font-size: 14px; font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+        .nav-cta {
+            padding: 8px 20px; border-radius: 8px;
+            background: var(--gradient-primary); color: white !important;
+            font-weight: 600; font-size: 13px;
+            -webkit-text-fill-color: white !important;
+            transition: box-shadow 0.3s, transform 0.2s;
+        }
+        .nav-cta:hover { box-shadow: 0 0 30px rgba(59,130,246,0.4); transform: translateY(-1px); }
+
+        /* ---- Hero ---- */
+        .hero {
+            position: relative; z-index: 1;
+            min-height: 100vh;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            text-align: center;
+            padding: 120px 24px 80px;
+        }
+        .hero-eyebrow {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 16px; border-radius: 999px;
+            background: rgba(59,130,246,0.1);
+            border: 1px solid rgba(59,130,246,0.2);
+            font-size: 13px; font-weight: 500;
+            color: var(--accent-blue);
+            margin-bottom: 24px;
+            animation: fadeUp 0.8s ease;
+        }
+        .hero-eyebrow .dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--accent-green);
+            animation: pulse-dot 2s infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+        }
+        .hero h1 {
+            font-size: clamp(40px, 6vw, 72px);
+            font-weight: 900; line-height: 1.1;
+            letter-spacing: -2px;
+            max-width: 900px;
+            animation: fadeUp 0.8s ease 0.1s both;
+        }
+        .hero h1 .gradient {
+            background: var(--gradient-hero);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .hero-sub {
+            font-size: clamp(16px, 2vw, 20px);
+            color: var(--text-secondary);
+            max-width: 640px;
+            margin-top: 20px; line-height: 1.7;
+            animation: fadeUp 0.8s ease 0.2s both;
+        }
+        .hero-actions {
+            display: flex; gap: 16px; margin-top: 40px;
+            flex-wrap: wrap; justify-content: center;
+            animation: fadeUp 0.8s ease 0.3s both;
+        }
+        .btn-hero {
+            display: inline-flex; align-items: center; gap: 10px;
+            padding: 14px 32px; border-radius: 12px;
+            font-size: 16px; font-weight: 700;
+            text-decoration: none; cursor: pointer;
+            transition: all 0.3s; border: none;
+            font-family: 'Inter', sans-serif;
+        }
+        .btn-hero-primary {
+            background: var(--gradient-primary); color: white;
+            box-shadow: 0 4px 20px rgba(59,130,246,0.3);
+        }
+        .btn-hero-primary:hover {
+            box-shadow: 0 8px 40px rgba(59,130,246,0.5);
+            transform: translateY(-2px);
+        }
+        .btn-hero-secondary {
+            background: rgba(30,41,59,0.6); color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        .btn-hero-secondary:hover {
+            background: rgba(51,65,85,0.6);
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 20px rgba(139,92,246,0.2);
+        }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ---- Stats Strip ---- */
+        .stats-strip {
+            position: relative; z-index: 1;
+            display: flex; justify-content: center; gap: 48px;
+            padding: 0 24px 80px;
+            flex-wrap: wrap;
+        }
+        .stat-item { text-align: center; }
+        .stat-number {
+            font-size: 48px; font-weight: 900;
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--gradient-hero);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .stat-label {
+            font-size: 14px; color: var(--text-muted);
+            font-weight: 500; margin-top: 4px;
+        }
+
+        /* ---- Section styles ---- */
+        .section { position: relative; z-index: 1; padding: 100px 48px; }
+        .section-center { text-align: center; max-width: 700px; margin: 0 auto 64px; }
+        .section-eyebrow {
+            font-size: 13px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 2px;
+            color: var(--accent-blue); margin-bottom: 12px;
+        }
+        .section-heading {
+            font-size: clamp(28px, 4vw, 44px);
+            font-weight: 800; letter-spacing: -1px; line-height: 1.2;
+        }
+        .section-sub {
+            font-size: 16px; color: var(--text-secondary);
+            margin-top: 16px; line-height: 1.7;
+        }
+
+        /* ---- Agent Cards ---- */
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px; max-width: 1200px; margin: 0 auto;
+        }
+        .agent-card {
+            background: rgba(30,41,59,0.4);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            transition: all 0.3s;
+            position: relative; overflow: hidden;
+        }
+        .agent-card::before {
+            content: ''; position: absolute;
+            top: 0; left: 0; right: 0; height: 3px;
+            border-radius: 16px 16px 0 0;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .agent-card:hover {
+            border-color: rgba(99,179,237,0.3);
+            transform: translateY(-4px);
+            box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+        }
+        .agent-card:hover::before { opacity: 1; }
+        .agent-card.sentinel::before { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+        .agent-card.detective::before { background: linear-gradient(90deg, #3b82f6, #22d3ee); }
+        .agent-card.historian::before { background: linear-gradient(90deg, #8b5cf6, #a855f7); }
+        .agent-card.mediator::before { background: linear-gradient(90deg, #22d3ee, #06b6d4); }
+        .agent-card.executor::before { background: linear-gradient(90deg, #10b981, #22d3ee); }
+        .agent-emoji { font-size: 36px; margin-bottom: 16px; display: block; }
+        .agent-name {
+            font-size: 20px; font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .agent-card.sentinel .agent-name { color: #f59e0b; }
+        .agent-card.detective .agent-name { color: #3b82f6; }
+        .agent-card.historian .agent-name { color: #8b5cf6; }
+        .agent-card.mediator .agent-name { color: #22d3ee; }
+        .agent-card.executor .agent-name { color: #10b981; }
+        .agent-desc {
+            font-size: 14px; color: var(--text-secondary);
+            line-height: 1.6;
+        }
+        .agent-tools {
+            display: flex; flex-wrap: wrap; gap: 6px;
+            margin-top: 16px;
+        }
+        .agent-tool {
+            font-size: 11px; padding: 3px 10px;
+            border-radius: 6px;
+            background: rgba(59,130,246,0.1);
+            color: var(--accent-blue);
+            border: 1px solid rgba(59,130,246,0.2);
+            font-weight: 500;
+        }
+
+        /* ---- Pipeline Visualizer ---- */
+        .pipeline-section { background: rgba(15,23,42,0.5); }
+        .pipeline {
+            display: flex; align-items: center; justify-content: center;
+            gap: 0; max-width: 1100px; margin: 0 auto;
+            flex-wrap: wrap;
+        }
+        .pipeline-step {
+            display: flex; flex-direction: column;
+            align-items: center; text-align: center;
+            padding: 20px;
+            min-width: 160px;
+        }
+        .pipeline-icon {
+            width: 64px; height: 64px;
+            border-radius: 16px; display: flex;
+            align-items: center; justify-content: center;
+            font-size: 28px; margin-bottom: 12px;
+            border: 2px solid var(--border);
+            transition: all 0.3s;
+        }
+        .pipeline-step:hover .pipeline-icon {
+            transform: scale(1.1);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 24px rgba(59,130,246,0.2);
+        }
+        .pipeline-step-name {
+            font-size: 14px; font-weight: 700;
+        }
+        .pipeline-step-desc {
+            font-size: 12px; color: var(--text-muted);
+            margin-top: 4px; max-width: 140px;
+        }
+        .pipeline-arrow {
+            font-size: 24px; color: var(--text-muted);
+            margin: 0 -4px;
+        }
+        @media (max-width: 900px) {
+            .pipeline { flex-direction: column; gap: 8px; }
+            .pipeline-arrow { transform: rotate(90deg); }
+        }
+
+        /* ---- Architecture section ---- */
+        .arch-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px; max-width: 1000px; margin: 0 auto;
+        }
+        .arch-card {
+            background: rgba(30,41,59,0.3);
+            border: 1px solid var(--border);
+            border-radius: 16px; padding: 28px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .arch-card:hover {
+            border-color: rgba(99,179,237,0.3);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .arch-icon { font-size: 28px; margin-bottom: 12px; }
+        .arch-title {
+            font-size: 16px; font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .arch-desc {
+            font-size: 13px; color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* ---- CTA section ---- */
+        .cta-section {
+            text-align: center; padding: 100px 24px;
+            position: relative; z-index: 1;
+        }
+        .cta-section h2 {
+            font-size: clamp(28px, 4vw, 44px);
+            font-weight: 800; letter-spacing: -1px;
+            margin-bottom: 16px;
+        }
+        .cta-section p {
+            font-size: 17px; color: var(--text-secondary);
+            max-width: 520px; margin: 0 auto 32px; line-height: 1.7;
+        }
+        .cta-actions {
+            display: flex; gap: 16px; justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* ---- Deploy Your Own section ---- */
+        .deploy-section {
+            position: relative; z-index: 1;
+            padding: 80px 24px;
+            background: linear-gradient(180deg, transparent 0%, rgba(16,185,129,0.03) 50%, transparent 100%);
+        }
+        .deploy-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 40px; max-width: 1000px; margin: 0 auto;
+            align-items: center;
+        }
+        .deploy-info h3 {
+            font-size: 14px; font-weight: 600; color: var(--accent-green);
+            text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px;
+        }
+        .deploy-info h2 {
+            font-size: clamp(24px, 3.5vw, 36px); font-weight: 800;
+            letter-spacing: -0.5px; margin-bottom: 16px;
+        }
+        .deploy-info p {
+            font-size: 15px; color: var(--text-secondary); line-height: 1.7;
+            margin-bottom: 20px;
+        }
+        .deploy-steps {
+            list-style: none; padding: 0; margin: 0 0 24px;
+        }
+        .deploy-steps li {
+            display: flex; align-items: flex-start; gap: 12px;
+            padding: 10px 0; font-size: 14px; color: var(--text-secondary);
+        }
+        .deploy-steps .step-num {
+            flex-shrink: 0; width: 28px; height: 28px;
+            border-radius: 50%; background: var(--gradient-green);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 700; color: #030712;
+        }
+        .deploy-terminal {
+            background: #0d1117; border: 1px solid #21262d;
+            border-radius: 12px; overflow: hidden;
+            font-family: 'JetBrains Mono', monospace; font-size: 13px;
+        }
+        .deploy-terminal-header {
+            display: flex; align-items: center; gap: 8px;
+            padding: 12px 16px; background: #161b22;
+            border-bottom: 1px solid #21262d;
+        }
+        .deploy-terminal-dot {
+            width: 12px; height: 12px; border-radius: 50%;
+        }
+        .deploy-terminal-dot.red { background: #ff5f57; }
+        .deploy-terminal-dot.yellow { background: #febc2e; }
+        .deploy-terminal-dot.green { background: #28c840; }
+        .deploy-terminal-title {
+            margin-left: 8px; color: #8b949e; font-size: 12px;
+        }
+        .deploy-terminal-body {
+            padding: 20px; line-height: 1.8; color: #c9d1d9;
+        }
+        .deploy-terminal-body .comment { color: #8b949e; }
+        .deploy-terminal-body .cmd { color: #79c0ff; }
+        .deploy-terminal-body .flag { color: #a5d6ff; }
+        .deploy-terminal-body .output { color: #3fb950; }
+        .deploy-cost {
+            margin-top: 16px; padding: 12px 16px;
+            background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2);
+            border-radius: 8px; font-size: 13px; color: var(--text-secondary);
+        }
+        .deploy-cost strong { color: var(--accent-green); }
+        @media (max-width: 768px) {
+            .deploy-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ---- Footer ---- */
+        footer {
+            position: relative; z-index: 1;
+            text-align: center; padding: 48px 24px;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted); font-size: 13px;
+        }
+        footer .tech-stack {
+            display: flex; gap: 12px; justify-content: center;
+            flex-wrap: wrap; margin-bottom: 20px;
+        }
+        footer .tech-badge {
+            padding: 4px 14px; border-radius: 8px;
+            background: rgba(30,41,59,0.5);
+            border: 1px solid var(--border);
+            font-size: 12px; font-weight: 500;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 768px) {
+            nav { padding: 12px 20px; }
+            .nav-links { gap: 16px; }
+            .section { padding: 60px 20px; }
+            .stats-strip { gap: 24px; }
+            .hero-actions { flex-direction: column; align-items: center; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+
+<!-- ============================================ -->
+<!-- NAVIGATION                                   -->
+<!-- ============================================ -->
+<nav>
+    <div class="nav-brand">NEXUS-ZERO</div>
+    <div class="nav-links">
+        <a href="#agents">Agents</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#deploy">Deploy</a>
+        <a href="/how-it-works">How We Work</a>
+        <a href="/dashboard" class="nav-cta">🚀 Live Dashboard</a>
+    </div>
+</nav>
+
+<!-- ============================================ -->
+<!-- HERO                                         -->
+<!-- ============================================ -->
+<section class="hero">
+    <div class="hero-eyebrow">
+        <span class="dot"></span>
+        Built for Google Cloud — Powered by MCP + Archestra A2A
+    </div>
+    <h1>
+        Incidents Resolve<br>
+        <span class="gradient">Before You Wake Up</span>
+    </h1>
+    <p class="hero-sub">
+        Nexus-Zero is an autonomous SRE platform where 5 AI agents collaborate
+        to detect, investigate, and remediate production incidents in under 60 seconds
+        — with full human oversight at every step.
+    </p>
+    <div class="hero-actions">
+        <a href="/dashboard" class="btn-hero btn-hero-primary">
+            ⚡ Try Live Demo
+        </a>
+        <a href="/how-it-works" class="btn-hero btn-hero-secondary">
+            📖 How It Works
+        </a>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- STATS STRIP                                  -->
+<!-- ============================================ -->
+<div class="stats-strip" id="live-stats">
+    <div class="stat-item">
+        <div class="stat-number" id="landing-stat-incidents">—</div>
+        <div class="stat-label">Incidents Handled</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-number">&lt;60s</div>
+        <div class="stat-label">Avg Resolution Time</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-number">5</div>
+        <div class="stat-label">Autonomous Agents</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-number">100%</div>
+        <div class="stat-label">Human Oversight</div>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- AGENTS                                       -->
+<!-- ============================================ -->
+<section class="section" id="agents">
+    <div class="section-center">
+        <div class="section-eyebrow">The Crew</div>
+        <h2 class="section-heading">Five Agents. One Mission.</h2>
+        <p class="section-sub">
+            Each agent is a specialized MCP-powered service deployed on Cloud Run.
+            They communicate through Archestra A2A protocol for real-time collaboration.
+        </p>
+    </div>
+
+    <div class="agents-grid">
+        <div class="agent-card sentinel">
+            <span class="agent-emoji">🛡️</span>
+            <div class="agent-name">Sentinel</div>
+            <p class="agent-desc">
+                Continuously monitors GCP Cloud Logging for anomalies.
+                Detects error spikes, latency anomalies, and cascading failures across all services.
+                Creates incidents and dispatches them to the investigation pipeline.
+            </p>
+            <div class="agent-tools">
+                <span class="agent-tool">Cloud Logging API</span>
+                <span class="agent-tool">Anomaly Detection</span>
+                <span class="agent-tool">Deduplication</span>
+            </div>
+        </div>
+
+        <div class="agent-card detective">
+            <span class="agent-emoji">🔍</span>
+            <div class="agent-name">Detective</div>
+            <p class="agent-desc">
+                Performs deep root cause analysis by correlating error patterns,
+                stack traces, deployment timelines, and service dependencies.
+                Works in parallel with Historian for faster resolution.
+            </p>
+            <div class="agent-tools">
+                <span class="agent-tool">Log Analysis</span>
+                <span class="agent-tool">Pattern Correlation</span>
+                <span class="agent-tool">Dependency Mapping</span>
+            </div>
+        </div>
+
+        <div class="agent-card historian">
+            <span class="agent-emoji">📚</span>
+            <div class="agent-name">Historian</div>
+            <p class="agent-desc">
+                Searches the playbook database and past incident history for proven solutions.
+                Ranks recommendations by confidence score and past success rate.
+                Learns from every resolved incident.
+            </p>
+            <div class="agent-tools">
+                <span class="agent-tool">Playbook Search</span>
+                <span class="agent-tool">Solution Ranking</span>
+                <span class="agent-tool">Learning Loop</span>
+            </div>
+        </div>
+
+        <div class="agent-card mediator">
+            <span class="agent-emoji">⚖️</span>
+            <div class="agent-name">Mediator</div>
+            <p class="agent-desc">
+                The safety guardrail. Assesses blast radius, checks change freeze windows,
+                evaluates rollback safety scores, and produces a risk verdict before any
+                action is taken. Requests human approval for critical actions.
+            </p>
+            <div class="agent-tools">
+                <span class="agent-tool">Blast Radius Analysis</span>
+                <span class="agent-tool">Safety Scoring</span>
+                <span class="agent-tool">Guardrails</span>
+            </div>
+        </div>
+
+        <div class="agent-card executor">
+            <span class="agent-emoji">🚀</span>
+            <div class="agent-name">Executor</div>
+            <p class="agent-desc">
+                Executes approved remediation actions — rollbacks, scaling, restarts, and
+                config changes. Only acts after human approval. Monitors post-action
+                health to confirm the fix worked.
+            </p>
+            <div class="agent-tools">
+                <span class="agent-tool">Cloud Run API</span>
+                <span class="agent-tool">Rollback Engine</span>
+                <span class="agent-tool">Health Verification</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- PIPELINE                                     -->
+<!-- ============================================ -->
+<section class="section pipeline-section" id="pipeline">
+    <div class="section-center">
+        <div class="section-eyebrow">End-to-End</div>
+        <h2 class="section-heading">The Incident Lifecycle</h2>
+        <p class="section-sub">
+            From anomaly detection to verified resolution — every step is audited, explained, and approved by a human.
+        </p>
+    </div>
+
+    <div class="pipeline">
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="border-color: rgba(245,158,11,0.4);">💣</div>
+            <div class="pipeline-step-name">Chaos Injection</div>
+            <div class="pipeline-step-desc">Failure modes injected into demo services</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="border-color: rgba(245,158,11,0.4);">🛡️</div>
+            <div class="pipeline-step-name">Sentinel Detects</div>
+            <div class="pipeline-step-desc">Scans Cloud Logging for anomalies</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="border-color: rgba(59,130,246,0.4);">🔍📚</div>
+            <div class="pipeline-step-name">Investigate</div>
+            <div class="pipeline-step-desc">Detective + Historian work in parallel</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="border-color: rgba(34,211,238,0.4);">⚖️</div>
+            <div class="pipeline-step-name">Mediate & Assess</div>
+            <div class="pipeline-step-desc">Risk scoring and blast radius analysis</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="border-color: rgba(245,158,11,0.4);">👤</div>
+            <div class="pipeline-step-name">Human Approval</div>
+            <div class="pipeline-step-desc">Judge approves or rejects the action</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="border-color: rgba(16,185,129,0.4);">🚀</div>
+            <div class="pipeline-step-name">Execute & Verify</div>
+            <div class="pipeline-step-desc">Remediation applied, health confirmed</div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- ARCHITECTURE                                 -->
+<!-- ============================================ -->
+<section class="section" id="architecture">
+    <div class="section-center">
+        <div class="section-eyebrow">Under the Hood</div>
+        <h2 class="section-heading">Built on Google Cloud</h2>
+        <p class="section-sub">
+            Fully serverless architecture. Every component runs on Cloud Run
+            with Cloud SQL for state and Cloud Logging for observability.
+        </p>
+    </div>
+
+    <div class="arch-grid">
+        <div class="arch-card">
+            <div class="arch-icon">🤖</div>
+            <div class="arch-title">MCP Protocol</div>
+            <p class="arch-desc">
+                Each agent exposes its capabilities as MCP tools — structured,
+                discoverable, and composable. The bridge layer translates between
+                MCP tool calls and GCP APIs.
+            </p>
+        </div>
+        <div class="arch-card">
+            <div class="arch-icon">🔗</div>
+            <div class="arch-title">Archestra A2A</div>
+            <p class="arch-desc">
+                Agent-to-agent communication powered by the Archestra Hub.
+                Sentinel orchestrates sub-agents (Detective, Historian, Mediator, Executor)
+                for coordinated incident response.
+            </p>
+        </div>
+        <div class="arch-card">
+            <div class="arch-icon">☁️</div>
+            <div class="arch-title">Cloud Run</div>
+            <p class="arch-desc">
+                8 serverless services deployed to Cloud Run — 5 agents, 3 demo services.
+                Auto-scaling from zero, sub-second cold starts, pay only when processing.
+            </p>
+        </div>
+        <div class="arch-card">
+            <div class="arch-icon">🗄️</div>
+            <div class="arch-title">Cloud SQL</div>
+            <p class="arch-desc">
+                PostgreSQL 18 stores incidents, audit logs, playbooks, and service metadata.
+                Full audit trail of every agent action for explainability and compliance.
+            </p>
+        </div>
+        <div class="arch-card">
+            <div class="arch-icon">📊</div>
+            <div class="arch-title">Cloud Logging</div>
+            <p class="arch-desc">
+                Centralized log aggregation. Sentinel queries structured logs in real-time
+                to detect error spikes, latency anomalies, and cascading failure patterns.
+            </p>
+        </div>
+        <div class="arch-card">
+            <div class="arch-icon">🔒</div>
+            <div class="arch-title">Human-in-the-Loop</div>
+            <p class="arch-desc">
+                Every remediation action requires human approval via the dashboard.
+                No autonomous execution without explicit consent. Full auditability.
+            </p>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- DEPLOY YOUR OWN                              -->
+<!-- ============================================ -->
+<section class="deploy-section" id="deploy">
+    <div class="deploy-grid">
+        <div class="deploy-info">
+            <h3>Open Source</h3>
+            <h2>Deploy on Your GCP Project</h2>
+            <p>
+                Nexus-Zero is fully portable. One command deploys the entire platform
+                — 5 AI agents, demo service, MCP bridge, and dashboard — to any
+                Google Cloud project in under 15 minutes.
+            </p>
+            <ol class="deploy-steps">
+                <li><span class="step-num">1</span> Clone the repo &amp; run <code style="color:var(--accent-cyan);">./deploy.sh</code></li>
+                <li><span class="step-num">2</span> Provide your GCP project ID &amp; Gemini API key</li>
+                <li><span class="step-num">3</span> Script creates Cloud SQL, deploys 8 Cloud Run services</li>
+                <li><span class="step-num">4</span> Register agents in Archestra Hub (5 SSE endpoints)</li>
+                <li><span class="step-num">5</span> Open your dashboard &amp; inject chaos</li>
+            </ol>
+            <div class="deploy-cost">
+                💰 <strong>~$0.30/day</strong> — Cloud SQL is the only always-on cost.
+                All Cloud Run services scale to zero when idle.
+                Full teardown with <code style="color:var(--accent-cyan);">./teardown.sh</code>.
+            </div>
+        </div>
+        <div class="deploy-terminal">
+            <div class="deploy-terminal-header">
+                <span class="deploy-terminal-dot red"></span>
+                <span class="deploy-terminal-dot yellow"></span>
+                <span class="deploy-terminal-dot green"></span>
+                <span class="deploy-terminal-title">Terminal</span>
+            </div>
+            <div class="deploy-terminal-body">
+                <span class="comment"># Clone &amp; deploy</span><br>
+                <span class="cmd">git clone</span> https://github.com/something1703/Nexus-Zero.git<br>
+                <span class="cmd">cd</span> Nexus-Zero<br>
+                <span class="cmd">./deploy.sh</span> <span class="flag">--project</span> my-gcp-project<br>
+                <br>
+                <span class="comment"># Output:</span><br>
+                <span class="output">✅ Cloud SQL created (nexus-zero-db)</span><br>
+                <span class="output">✅ 5 MCP agents deployed</span><br>
+                <span class="output">✅ Order API deployed (chaos target)</span><br>
+                <span class="output">✅ Bridge deployed</span><br>
+                <span class="output">✅ Dashboard deployed</span><br>
+                <br>
+                <span class="output">🌐 Dashboard: https://nexus-dashboard-xxx.run.app</span><br>
+                <br>
+                <span class="comment"># Tear down when done</span><br>
+                <span class="cmd">./teardown.sh</span> <span class="flag">--project</span> my-gcp-project<br>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- CTA                                          -->
+<!-- ============================================ -->
+<section class="cta-section">
+    <h2>See It In Action</h2>
+    <p>
+        Inject chaos. Watch agents think. Approve the fix.
+        All in under 60 seconds.
+    </p>
+    <div class="cta-actions">
+        <a href="/dashboard" class="btn-hero btn-hero-primary">
+            ⚡ Open Live Dashboard
+        </a>
+        <a href="/how-it-works" class="btn-hero btn-hero-secondary">
+            📖 Deep Dive — How We Work
+        </a>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- FOOTER                                       -->
+<!-- ============================================ -->
+<footer>
+    <div class="tech-stack">
+        <span class="tech-badge">Python</span>
+        <span class="tech-badge">Flask</span>
+        <span class="tech-badge">Cloud Run</span>
+        <span class="tech-badge">Cloud SQL</span>
+        <span class="tech-badge">Cloud Logging</span>
+        <span class="tech-badge">MCP</span>
+        <span class="tech-badge">Archestra A2A</span>
+        <span class="tech-badge">PostgreSQL 18</span>
+        <span class="tech-badge">Gemini 2.5 Flash</span>
+    </div>
+    <p>Nexus-Zero — Autonomous SRE Platform · Built for 2 Fast 2 MCP Hackathon by Archestra 2026</p>
+</footer>
+
+<!-- ============================================ -->
+<!-- LIVE STATS FETCHER                           -->
+<!-- ============================================ -->
+<script>
+    (async function loadStats() {
+        try {
+            const resp = await fetch('/api/stats');
+            if (resp.ok) {
+                const data = await resp.json();
+                const el = document.getElementById('landing-stat-incidents');
+                if (el && data.total_incidents) {
+                    el.textContent = data.total_incidents;
+                }
+            }
+        } catch(e) { /* silent fail on landing page */ }
+    })();
+</script>
+
+</body>
+</html>
