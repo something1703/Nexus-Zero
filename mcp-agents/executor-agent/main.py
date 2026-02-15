@@ -238,7 +238,7 @@ def approve_action(audit_log_id: str, approved_by: str = "operator") -> str:
                 """
                 SELECT al.id, al.incident_id, al.agent_name, al.action_type,
                        al.action_details, al.status,
-                       i.affected_service
+                       i.service_name
                 FROM audit_logs al
                 JOIN incidents i ON i.id = al.incident_id
                 WHERE al.id = %s
@@ -251,7 +251,7 @@ def approve_action(audit_log_id: str, approved_by: str = "operator") -> str:
             return json.dumps({"error": f"Audit log {audit_log_id} not found."})
 
         cols = ["id", "incident_id", "agent_name", "action_type",
-                "action_details", "status", "affected_service"]
+                "action_details", "status", "service_name"]
         action = dict(zip(cols, row))
 
         if action["status"] != "pending":
@@ -267,7 +267,7 @@ def approve_action(audit_log_id: str, approved_by: str = "operator") -> str:
         if isinstance(details, str):
             details = json.loads(details)
 
-        service_name = action["affected_service"] or details.get("service", "unknown")
+        service_name = action["service_name"] or details.get("service", "unknown")
         action_type = action["action_type"]
 
         # Execute the action
