@@ -161,15 +161,45 @@ def detect_anomalies(
             if service_errors[service_name]["last_error"] is None or ts > service_errors[service_name]["last_error"]:
                 service_errors[service_name]["last_error"] = ts
 
-        # Create incidents for each affected service
-        incidents_created = []
+        # Deduplicate by service + error_signature before creating incidents
+        deduplicated_errors = {}
         for service_name, error_data in service_errors.items():
-            error_count = error_data["error_count"]
+            sample_entry = error_data["entries"][0]
+            error_signature = _extract_error_signature(sample_entry)
+            
+            # Use service::signature as unique key
+            dedup_key = f"{service_name}::{error_signature}"
+            
+            if dedup_key not in deduplicated_errors:
+                deduplicated_errors[dedup_key] = {
+                    "service_name": service_name,
+                    "error_signature": error_signature,
+                    "entries": error_data["entries"],
+                    "error_count": error_data["error_count"],
+                    "first_error": error_data["first_error"],
+                    "last_error": error_data["last_error"]
+                }
+            else:
+                # Merge duplicate errors
+                deduplicated_errors[dedup_key]["entries"].extend(error_data["entries"])
+                deduplicated_errors[dedup_key]["error_count"] += error_data["error_count"]
+                
+                # Update time boundaries
+                if error_data["first_error"] and error_data["first_error"] < deduplicated_errors[dedup_key]["first_error"]:
+                    deduplicated_errors[dedup_key]["first_error"] = error_data["first_error"]
+                if error_data["last_error"] and error_data["last_error"] > deduplicated_errors[dedup_key]["last_error"]:
+                    deduplicated_errors[dedup_key]["last_error"] = error_data["last_error"]
+
+        # Create incidents from deduplicated data
+        incidents_created = []
+        for dedup_key, error_info in deduplicated_errors.items():
+            service_name = error_info["service_name"]
+            error_signature = error_info["error_signature"]
+            error_count = error_info["error_count"]
             error_rate = min(100.0, (error_count / max(time_window_minutes, 1)) * 10)
             severity = _classify_severity(error_count, error_rate)
 
-            sample_entry = error_data["entries"][0]
-            error_signature = _extract_error_signature(sample_entry)
+            sample_entry = error_info["entries"][0]
             error_message = str(sample_entry.payload)[:500] if sample_entry.payload else "Unknown error"
             stack_trace = _extract_stack_trace(sample_entry)
 
@@ -190,8 +220,8 @@ def detect_anomalies(
                 "error_rate_percent": round(error_rate, 2),
                 "error_signature": error_signature,
                 "error_message": error_message[:200],
-                "first_error": error_data["first_error"].isoformat() if error_data["first_error"] else None,
-                "last_error": error_data["last_error"].isoformat() if error_data["last_error"] else None
+                "first_error": error_info["first_error"].isoformat() if error_info["first_error"] else None,
+                "last_error": error_info["last_error"].isoformat() if error_info["last_error"] else None
             })
 
         result = {
