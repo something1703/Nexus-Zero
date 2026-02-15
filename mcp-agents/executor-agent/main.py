@@ -59,7 +59,7 @@ def _get_pending_actions(incident_id: str | None = None) -> list[dict]:
                        i.service_name, i.severity
                 FROM audit_logs al
                 JOIN incidents i ON i.id = al.incident_id
-                WHERE al.status = 'pending_approval'
+                WHERE al.status = 'pending'
                   AND al.incident_id = %s
                 ORDER BY al.created_at ASC
                 """,
@@ -73,13 +73,12 @@ def _get_pending_actions(incident_id: str | None = None) -> list[dict]:
                        i.service_name, i.severity
                 FROM audit_logs al
                 JOIN incidents i ON i.id = al.incident_id
-                WHERE al.status = 'pending_approval'
+                WHERE al.status = 'pending'
                 ORDER BY al.created_at ASC
                 """
             )
         rows = cur.fetchall()
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, r)) for r in rows]
+        return [dict(r) for r in rows]
 
 
 def _simulate_rollback(service_name: str, details: dict) -> dict:
