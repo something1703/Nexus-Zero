@@ -250,9 +250,8 @@ def approve_action(audit_log_id: str, approved_by: str = "operator") -> str:
         if not row:
             return json.dumps({"error": f"Audit log {audit_log_id} not found."})
 
-        cols = ["id", "incident_id", "agent_name", "action_type",
-                "action_details", "status", "service_name"]
-        action = dict(zip(cols, row))
+        # RealDictCursor returns a dict directly, convert to regular dict
+        action = dict(row)
 
         if action["status"] != "pending":
             return json.dumps({
